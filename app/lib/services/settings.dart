@@ -66,6 +66,11 @@ class SettingsStore extends ChangeNotifier {
 
   /// The [PrizeSpec] used for new sessions.
   PrizeSpec get defaultPrize => _prizePreset.spec;
+
+  /// Prize passed to a new session: `null` for the default preset so the
+  /// engine can pick a figure-box or plush default from the detected prize.
+  PrizeSpec? get sessionPrize =>
+      _prizePreset == PrizePreset.figureBoxM ? null : _prizePreset.spec;
   bool get showShootingGuide => _showShootingGuide;
 
   /// Localized strings for the current locale.

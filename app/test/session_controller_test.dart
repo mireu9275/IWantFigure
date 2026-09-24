@@ -20,7 +20,9 @@ void main() {
     expect(c.state, SessionState.ready);
     expect(states, contains(SessionState.analyzing));
     expect(svc.lastLocale, 'en');
-    expect(svc.lastHints?.prizeSizeMm, [150, 200, 100]);
+    expect(svc.lastHints?.prizeSizeMm, isNull, reason: 'no explicit prize → engine picks a default by kind');
+    expect(c.prizeIsExplicit, isFalse);
+    expect(c.prize.widthMm, 150);
     final first = c.plan!.currentStepIndex;
 
     c.addObservation(ObservationKind.smallMove);

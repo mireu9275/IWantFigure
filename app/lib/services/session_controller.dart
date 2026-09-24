@@ -29,7 +29,7 @@ class SessionController extends ChangeNotifier {
     this.engine = const AimEngine(),
     this.history,
     this.hints,
-  }) : _prize = prize ?? PrizeSpec.defaultFigureBox;
+  }) : _prize = prize; // ignore: prefer_initializing_formals
 
   /// Reopens a saved session read-only (no observations can be added).
   SessionController.fromHistory(
@@ -71,7 +71,10 @@ class SessionController extends ChangeNotifier {
   AnalysisService? service;
 
   String _locale;
-  PrizeSpec _prize;
+
+  /// Prize size chosen by the user; `null` = decide from the detected prize
+  /// kind (figure box vs plush) — see [prize].
+  PrizeSpec? _prize;
   AnalysisResult? _analysis;
   SceneCorrections _corrections = SceneCorrections.none;
   List<Observation> _observations = [];
@@ -86,7 +89,16 @@ class SessionController extends ChangeNotifier {
   bool _disposed = false;
 
   String get locale => _locale;
-  PrizeSpec get prize => _prize;
+  /// The prize size in effect: the user's choice, or a default matching the
+  /// detected prize kind.
+  PrizeSpec get prize => _prize ?? _autoPrize;
+
+  /// True when the user set the prize size explicitly.
+  bool get prizeIsExplicit => _prize != null;
+
+  PrizeSpec get _autoPrize => _analysis?.targetPrize?.kind == ObjectKind.plush
+      ? PrizeSpec.defaultPlush
+      : PrizeSpec.defaultFigureBox;
   AnalysisResult? get analysis => _analysis;
   SceneCorrections get corrections => _corrections;
   List<Observation> get observations => List.unmodifiable(_observations);
@@ -123,7 +135,9 @@ class SessionController extends ChangeNotifier {
         locale: _locale,
         hints: hints ??
             AnalyzeHints(
-              prizeSizeMm: [_prize.widthMm, _prize.depthMm, _prize.heightMm],
+              prizeSizeMm: _prize == null
+                  ? null
+                  : [_prize!.widthMm, _prize!.depthMm, _prize!.heightMm],
             ),
       );
       if (_disposed) return;
@@ -200,7 +214,7 @@ class SessionController extends ChangeNotifier {
       imageWidth: photo.width,
       imageHeight: photo.height,
       observations: _observations,
-      prize: _prize,
+      prize: prize,
       corrections: _corrections,
       outcome: _outcome,
       plays: _plays,

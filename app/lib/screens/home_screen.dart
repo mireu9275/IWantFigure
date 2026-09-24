@@ -45,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
       photo: photo,
       service: scope.buildService(),
       locale: scope.settings.locale.code,
-      prize: scope.settings.defaultPrize,
+      prize: scope.settings.sessionPrize,
       history: scope.history,
     );
     await Navigator.of(context).push(

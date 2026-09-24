@@ -86,8 +86,18 @@ class AimEngine {
     final rationale = <String>[];
 
     final prizeObj = analysis.targetPrize;
-    final prizeBbox = corrections.prizeBbox ?? prizeObj?.bbox;
+    // User corrections come straight from drag handles; normalize them the
+    // same way detected boxes are normalized on parse.
+    final prizeBbox = (corrections.prizeBbox ?? prizeObj?.bbox)?.normalized();
     if (prizeBbox == null || analysis.layoutType == LayoutType.unknown) {
+      return _noPlan(analysis, t, warnings);
+    }
+    if (prizeBbox.width < 0.01 || prizeBbox.height < 0.01) {
+      warnings.add(t(
+        ko: '경품 영역이 너무 작거나 사진 밖에 있습니다. 보정 모드에서 경품 상자를 다시 지정해 주세요.',
+        ja: '景品の範囲が小さすぎるか写真の外にあります。補正モードで景品の箱を指定し直してください。',
+        en: 'The prize region is degenerate or outside the photo. Re-draw the prize box in correction mode.',
+      ));
       return _noPlan(analysis, t, warnings);
     }
 
@@ -255,27 +265,59 @@ class AimEngine {
         if (technique == Technique.tateHame || technique == Technique.yokoHame) {
           // Community rule: heavy → 縦ハメ, light → 横ハメ; and 横ハメ needs a
           // gap wider than the box width.
-          final wantYoko = !spec.isHeavy && analysis.strategy.technique != Technique.tateHame;
+          final proposedTate = analysis.strategy.technique == Technique.tateHame;
+          var wantYoko = !spec.isHeavy && !proposedTate;
+          var forcedByGap = false;
+          if (wantYoko && !geo.barsSynthesized && geo.barGapMm < spec.widthMm * 1.05) {
+            // Only trust the gap when the bars were actually detected.
+            wantYoko = false;
+            forcedByGap = true;
+          }
+          if (wantYoko && geo.barsSynthesized) {
+            warnings.add(t(
+              ko: '바 간격을 사진에서 확인하지 못했습니다. 실제 간격이 박스 폭(${spec.widthMm.round()}mm)보다 좁으면 横ハメ 대신 縦ハメ로 바꾸세요.',
+              ja: 'バー間隔を写真から確認できませんでした。実際の間隔が箱の幅(${spec.widthMm.round()}mm)より狭ければ横ハメではなく縦ハメに切り替えてください。',
+              en: 'The bar gap could not be measured from the photo. If it is narrower than the box width (${spec.widthMm.round()} mm), switch from 横ハメ to 縦ハメ.',
+            ));
+          }
           technique = wantYoko ? Technique.yokoHame : Technique.tateHame;
-          if (technique == Technique.yokoHame && geo.barGapMm < spec.widthMm * 1.05) {
-            technique = Technique.tateHame;
+          if (forcedByGap) {
             warnings.add(t(
               ko: '바 간격(약 ${geo.barGapMm.round()}mm)이 박스 폭(${spec.widthMm.round()}mm)보다 좁아 横ハメ가 불가능합니다. 縦ハメ로 진행합니다.',
               ja: 'バー間隔(約${geo.barGapMm.round()}mm)が箱の幅(${spec.widthMm.round()}mm)より狭いため横ハメはできません。縦ハメで進めます。',
               en: 'The bar gap (~${geo.barGapMm.round()} mm) is narrower than the box width (${spec.widthMm.round()} mm), so 横ハメ is impossible. Using 縦ハメ.',
             ));
           }
-          rationale.add(technique == Technique.tateHame
-              ? t(
-                  ko: '橋渡し: 아암 파워는 보통 박스를 들어 올리기에 부족하게 설정되므로 "잡기"가 아니라 "조금씩 회전시켜 바 사이로 떨어뜨리기"가 목표입니다. 무거운 박스(${spec.massG?.round() ?? '~300'}g)는 세워서 끼우는 縦ハメ가 정석입니다.',
-                  ja: '橋渡し: アームパワーは箱を持ち上げられないよう設定されるのが普通なので、「掴む」ではなく「少しずつ回転させてバーの間に落とす」のが目標です。重い箱(${spec.massG?.round() ?? '約300'}g)は縦ハメが定石です。',
-                  en: 'Bridge setup: the arm is usually too weak to lift the box, so the goal is to rotate it little by little until it drops between the bars. A heavy box (${spec.massG?.round() ?? '~300'} g) is stood up (縦ハメ).',
-                )
-              : t(
-                  ko: '橋渡し: 가벼운 박스는 바에 수평이 되도록 돌려 넓은 틈으로 떨어뜨리는 横ハメ가 유리합니다.',
-                  ja: '橋渡し: 軽い箱はバーと平行になるよう回して隙間に落とす横ハメが有利です。',
-                  en: 'Bridge setup: a light box is turned parallel to the bars so it drops flat through the gap (横ハメ).',
-                ));
+          rationale.add(t(
+            ko: '橋渡し: 아암 파워는 보통 박스를 들어 올리기에 부족하게 설정되므로 "잡기"가 아니라 "조금씩 회전시켜 바 사이로 떨어뜨리기"가 목표입니다.',
+            ja: '橋渡し: アームパワーは箱を持ち上げられないよう設定されるのが普通なので、「掴む」ではなく「少しずつ回転させてバーの間に落とす」のが目標です。',
+            en: 'Bridge setup: the arm is usually too weak to lift the box, so the goal is to rotate it little by little until it drops between the bars.',
+          ));
+          if (technique == Technique.yokoHame) {
+            rationale.add(t(
+              ko: '가벼운 박스(${spec.massG?.round() ?? '~300'}g)는 바에 수평이 되도록 돌려 넓은 틈으로 떨어뜨리는 横ハメ가 유리합니다.',
+              ja: '軽い箱(${spec.massG?.round() ?? '約300'}g)はバーと平行になるよう回して隙間に落とす横ハメが有利です。',
+              en: 'A light box (${spec.massG?.round() ?? '~300'} g) is turned parallel to the bars so it drops flat through the gap (横ハメ).',
+            ));
+          } else if (forcedByGap) {
+            rationale.add(t(
+              ko: '바 간격이 박스 폭보다 좁아 가로로는 빠지지 않으므로, 세워서 끼우는 縦ハメ로 갑니다.',
+              ja: 'バー間隔が箱の幅より狭く横では落ちないため、立てて挟む縦ハメで攻めます。',
+              en: 'The gap is narrower than the box width, so it cannot drop flat; stand it up instead (縦ハメ).',
+            ));
+          } else if (spec.isHeavy) {
+            rationale.add(t(
+              ko: '무거운 박스(${spec.massG?.round() ?? '~300'}g)는 세워서 끼우는 縦ハメ가 정석입니다.',
+              ja: '重い箱(${spec.massG?.round() ?? '約300'}g)は縦ハメが定石です。',
+              en: 'A heavy box (${spec.massG?.round() ?? '~300'} g) is stood up (縦ハメ).',
+            ));
+          } else {
+            rationale.add(t(
+              ko: '분석 결과가 縦ハメ를 제안했습니다. 박스가 가볍다면 横ハメ도 시도할 수 있습니다.',
+              ja: '解析結果が縦ハメを提案しています。箱が軽ければ横ハメも試せます。',
+              en: 'The analysis proposed 縦ハメ. If the box is light, 横ハメ is also an option.',
+            ));
+          }
         }
       case LayoutType.bridgeHanoji:
         if (armPower == ArmPower.strong && technique == Technique.noriage) {
@@ -376,16 +418,10 @@ class AimEngine {
       );
     }
 
-    // Box sitting toward the back → pull it forward first (手前を狙う).
-    // Known from the user's correction, or when the analysis itself proposed
-    // pulling the front edge.
-    final st = analysis.strategy;
-    final llmSaysPullFront = st.technique == Technique.yose &&
-        (st.targetEdge == TargetEdge.front ||
-            st.targetEdge == TargetEdge.frontLeft ||
-            st.targetEdge == TargetEdge.frontRight);
-    final needsPullForward =
-        layout.isBridge && (geo.boxYMm < -0.12 * spec.depthMm || llmSaysPullFront);
+    // Box sitting toward the back (user's front/back correction) → pull it
+    // forward first (手前を狙う). An analysis that proposes 寄せ on the front
+    // edge already routes to the yose branch below.
+    final needsPullForward = layout.isBridge && geo.boxYMm < -0.12 * spec.depthMm;
 
     switch (technique) {
       case Technique.tateHame:
@@ -550,9 +586,11 @@ class AimEngine {
       case Technique.mochiage:
       case Technique.kadoOshi:
         final rightFirst = analysis.machine.exitSide != ExitSide.left;
+        final rightEdge = layout.isBridge ? TargetEdge.backRight : TargetEdge.frontRight;
+        final leftEdge = layout.isBridge ? TargetEdge.backLeft : TargetEdge.frontLeft;
         final corners = rightFirst
-            ? [(Arm.right, TargetEdge.frontRight, 1 - inset), (Arm.left, TargetEdge.frontLeft, inset)]
-            : [(Arm.left, TargetEdge.frontLeft, inset), (Arm.right, TargetEdge.frontRight, 1 - inset)];
+            ? [(Arm.right, rightEdge, 1 - inset), (Arm.left, leftEdge, inset)]
+            : [(Arm.left, leftEdge, inset), (Arm.right, rightEdge, 1 - inset)];
         for (final (arm, edge, v) in corners) {
           steps.add(make(
             arm: arm,
@@ -668,7 +706,7 @@ class AimEngine {
           fy: 0.25,
           title: t(ko: '산 꼭대기 근처를 눌러 무너뜨리기(雪崩)', ja: '山の頂上付近を押して崩す(雪崩)', en: 'Press near the top of the pile to trigger an avalanche (雪崩)'),
           detail: t(
-            ko: '寄せる·押す·すくう가 기본입니다. 경사가 낙하구 쪽으로 내려가는 방향으로 밀어 포텐셜 에너지를 무너뜨립니다.',
+            ko: '끌기·밀기·퍼올리기(寄せる・押す・すくう)가 기본입니다. 경사가 낙하구 쪽으로 내려가는 방향으로 밀어 포텐셜 에너지를 무너뜨립니다.',
             ja: '寄せる・押す・すくうが基本。落とし口へ下る斜面の方向へ押して崩します。',
             en: 'Pull, push or scoop toward the exit so the slope collapses in that direction.',
           ),
@@ -760,6 +798,10 @@ class AimEngine {
       final lifted = observations.any((o) => o.kind == ObservationKind.lifted || o.kind == ObservationKind.bigMove);
       return lifted ? 1 : 0;
     }
+    if (technique == Technique.tateHame && steps.length == 3 && steps.first.technique == Technique.yose) {
+      // The pull-forward play is made once; afterwards alternate the two 縦ハメ plays.
+      return played == 0 ? 0 : 1 + (played - 1) % 2;
+    }
     return played % steps.length;
   }
 
@@ -800,7 +842,7 @@ class AimEngine {
     required _Tr t,
   }) {
     final layout = analysis.layoutType;
-    final prize = geo.prizeBox;
+    final prize = geo.prizeBox.copyWith(label: t(ko: '경품', ja: '景品', en: 'prize'));
     final boxes = <SceneBox>[prize];
     final cylinders = <SceneCylinder>[];
     SceneDropHole? hole;
@@ -903,15 +945,18 @@ class AimEngine {
     if (current == null) return null;
     final p = prize.pose;
     final pos = p.position;
+    final r = p.rotation;
     final rightSide = current.arm == Arm.right;
     Pose to;
     String desc;
     switch (technique) {
       case Technique.tateHame:
-        to = Pose(Vec3(pos.x, pos.y + 15, pos.z - 25), Rotation(pitchDeg: -32, yawDeg: rightSide ? -6 : 6));
+        to = Pose(Vec3(pos.x, pos.y + 15, pos.z - 25), r.plus(pitchDeg: -32, yawDeg: rightSide ? -6 : 6));
         desc = t(ko: '안쪽 끝이 들리고 앞쪽이 바 사이로 내려감', ja: '奥端が上がり前側がバーの間へ下がる', en: 'Back end rises, front slides into the gap');
       case Technique.yokoHame:
-        to = Pose(pos, Rotation(yawDeg: rightSide ? 35 : -35));
+        // The hooked corner is dragged toward the claw centre: the right arm
+        // turns the box counter-clockwise seen from above (negative yaw here).
+        to = Pose(pos, r.plus(yawDeg: rightSide ? -35 : 35));
         desc = t(ko: '위에서 보아 약 35° 회전', ja: '上から見て約35°回転', en: 'Rotates about 35° seen from above');
       case Technique.yose:
       case Technique.zurashi:
@@ -920,17 +965,17 @@ class AimEngine {
         to = Pose(Vec3(pos.x + dx, pos.y + dy, pos.z), p.rotation);
         desc = t(ko: '낙하구 방향으로 수 cm 이동', ja: '落とし口方向へ数cm移動', en: 'Slides a few cm toward the exit');
       case Technique.oshikomi:
-        to = Pose(Vec3(pos.x, pos.y + 30, pos.z - 30), const Rotation(pitchDeg: -28));
+        to = Pose(Vec3(pos.x, pos.y + 30, pos.z - 30), r.plus(pitchDeg: -28));
         desc = t(ko: '앞 모서리가 내려가며 낙하', ja: '前角が下がって落下', en: 'Front edge dips and the prize falls');
       case Technique.mochiage:
       case Technique.kadoOshi:
-        to = Pose(Vec3(pos.x, pos.y, pos.z + 25), Rotation(rollDeg: rightSide ? -18 : 18));
+        to = Pose(Vec3(pos.x, pos.y, pos.z + 25), r.plus(rollDeg: rightSide ? -18 : 18));
         desc = t(ko: '모서리가 들려 기울어짐', ja: '角が持ち上がって傾く', en: 'The corner lifts and the prize tilts');
       case Technique.noriage:
-        to = Pose(Vec3(pos.x, pos.y + 10, pos.z + 20), const Rotation(pitchDeg: -22));
+        to = Pose(Vec3(pos.x, pos.y + 10, pos.z + 20), r.plus(pitchDeg: -22));
         desc = t(ko: '안쪽 끝이 뒤 바 위에 얹힘', ja: '奥端が奥バーに乗る', en: 'Back end rests on the back bar');
       case Technique.tsuki:
-        to = Pose(Vec3(pos.x, pos.y + 25, pos.z - 15), const Rotation(pitchDeg: -15));
+        to = Pose(Vec3(pos.x, pos.y + 25, pos.z - 15), r.plus(pitchDeg: -15));
         desc = t(ko: '찔린 모서리가 들리고 앞으로 넘어감', ja: '突かれた角が上がり前へ倒れる', en: 'Poked corner lifts and it tips forward');
       case Technique.hikkake:
         to = Pose(Vec3(pos.x, pos.y, pos.z + 60), p.rotation);
@@ -1027,10 +1072,12 @@ class _Geometry {
   }
 
   /// Field position of a point given as fractions of the prize bbox
-  /// (fx: left→right, fy: top→bottom of the bbox). Used for plush/ring targets.
+  /// (fx: left→right, fy: top→bottom of the bbox). The top of the bbox is the
+  /// far side (奥, −Y) and the bottom the near side (手前, +Y), matching the
+  /// top-face convention of [top]. Used for plush/ring targets.
   Vec3 fieldOnBbox(double fx, double fy) {
     final s = prizeBox.size;
-    return prizeBox.pose.toWorld(Vec3((fx - 0.5) * s.x, (0.5 - fy) * s.y, s.z / 2));
+    return prizeBox.pose.toWorld(Vec3((fx - 0.5) * s.x, (fy - 0.5) * s.y, s.z / 2));
   }
 
   static Pt _lerp(Pt a, Pt b, double t) => Pt(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
@@ -1056,8 +1103,8 @@ class _Geometry {
     ];
 
     // Bars ------------------------------------------------------------------
-    NBox? front = corrections.frontBar;
-    NBox? back = corrections.backBar;
+    NBox? front = corrections.frontBar?.normalized();
+    NBox? back = corrections.backBar?.normalized();
     if (front == null || back == null) {
       final bars = analysis.objects.where((o) => o.kind.isBar).map((o) => o.bbox).toList()
         ..sort((a, b) => a.cy.compareTo(b.cy));
@@ -1101,7 +1148,7 @@ class _Geometry {
       xl = prizeBbox.cx - prizeBbox.width * 1.5;
       xr = prizeBbox.cx + prizeBbox.width * 1.5;
     }
-    final fieldSpan = xr - xl;
+    final fieldSpan = math.max(xr - xl, 1e-3);
 
     // Metric placement ---------------------------------------------------------
     final boxX = ((prizeBbox.cx - xl) / fieldSpan - 0.5) * options.fieldWidthMm;
@@ -1129,9 +1176,9 @@ class _Geometry {
       label: spec.name,
     );
 
-    final dropHole = corrections.dropHole ??
+    final dropHole = corrections.dropHole?.normalized() ??
         (analysis.ofKind(ObjectKind.dropHole).isNotEmpty ? analysis.ofKind(ObjectKind.dropHole).first.bbox : null);
-    final claw = corrections.claw ??
+    final claw = corrections.claw?.normalized() ??
         (analysis.ofKind(ObjectKind.claw).isNotEmpty ? analysis.ofKind(ObjectKind.claw).first.bbox : null);
 
     return _Geometry(

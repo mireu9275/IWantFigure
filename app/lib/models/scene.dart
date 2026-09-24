@@ -51,7 +51,11 @@ class Vec3 {
   int get hashCode => Object.hash(x, y, z);
 }
 
-/// Rotation as Euler angles in degrees, applied in the order yaw (Z), pitch (X), roll (Y).
+/// Rotation as Euler angles in degrees. [apply] rotates a local vector by
+/// roll (about Y), then pitch (about X), then yaw (about Z) in the fixed field
+/// frame — i.e. the intrinsic yaw → pitch → roll reading. Because the field
+/// frame is left-handed (X right, Y toward the player, Z up), a positive yaw
+/// turns the box clockwise when seen from above.
 class Rotation {
   const Rotation({this.yawDeg = 0, this.pitchDeg = 0, this.rollDeg = 0});
 
@@ -65,6 +69,13 @@ class Rotation {
 
   /// Rotation about Y — tilting left/right side up or down.
   final double rollDeg;
+
+  /// Adds angle deltas to this rotation.
+  Rotation plus({double yawDeg = 0, double pitchDeg = 0, double rollDeg = 0}) => Rotation(
+        yawDeg: this.yawDeg + yawDeg,
+        pitchDeg: this.pitchDeg + pitchDeg,
+        rollDeg: this.rollDeg + rollDeg,
+      );
 
   Rotation lerp(Rotation o, double t) => Rotation(
         yawDeg: yawDeg + (o.yawDeg - yawDeg) * t,

@@ -20,7 +20,7 @@ enum LayoutType {
   twoClawDirect('two_claw_direct', '2本爪 直取り'),
   pile('pile', '山積み'),
   floorBox('floor_box', '箱 直置き'),
-  unknown('unknown', '판별 불가');
+  unknown('unknown', '判別不可');
 
   const LayoutType(this.wire, this.labelJa);
 

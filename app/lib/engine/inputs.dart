@@ -155,7 +155,8 @@ class SceneCorrections {
   final NBox? dropHole;
   final NBox? claw;
 
-  /// Rotation of the prize seen from above, degrees (positive = counter-clockwise).
+  /// Rotation of the prize seen from above, degrees (positive = clockwise,
+  /// see [Rotation]).
   final double? yawDeg;
 
   /// Front/back offset of the prize on the bars in mm (negative = toward the

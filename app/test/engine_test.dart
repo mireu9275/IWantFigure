@@ -181,4 +181,76 @@ void main() {
       }
     }
   });
+
+  test('3D field frame: back edge of the prize is −Y, ring targets map the same way', () {
+    final r = _sample();
+    final tate = engine.plan(r).steps.firstWhere((s) => s.technique == Technique.tateHame);
+    expect(tate.fieldPoint.y, lessThan(0), reason: 'back end (奥) is −Y');
+
+    final ring = r.copyWith(
+      layoutType: LayoutType.ringPera,
+      strategy: const Strategy(technique: Technique.hikkake, targetObjectId: 'box1'),
+      objects: [
+        const DetectedObject(id: 'box1', kind: ObjectKind.box, bbox: NBox(0.3, 0.4, 0.7, 0.8)),
+        const DetectedObject(id: 'ring1', kind: ObjectKind.ring, bbox: NBox(0.45, 0.40, 0.55, 0.44)),
+      ],
+    );
+    final step = engine.plan(ring).steps.single;
+    expect(step.tipPoint.y, lessThan(0.5), reason: 'ring is at the top (far) edge in the photo');
+    expect(step.fieldPoint.y, lessThan(0), reason: 'so it must be at the back (−Y) in 3D');
+  });
+
+  test('predicted motion keeps the user yaw and turns the right way for 横ハメ', () {
+    final r = _sample().copyWith(strategy: const Strategy(technique: Technique.yokoHame, targetObjectId: 'box1'));
+    const light = PrizeSpec(widthMm: 100, depthMm: 200, heightMm: 80, massG: 150);
+    final plan = engine.plan(r, prize: light, corrections: const SceneCorrections(yawDeg: 40));
+    expect(plan.technique, Technique.yokoHame);
+    expect(plan.current!.arm, Arm.right);
+    final m = plan.scene.motion!;
+    expect(m.from.rotation.yawDeg, 40);
+    // Right arm hooks the back-right corner and drags it toward the claw centre → counter-clockwise (negative yaw here).
+    expect(m.to.rotation.yawDeg, closeTo(40 - 35, 1e-9));
+
+    final tate = engine.plan(_sample(), corrections: const SceneCorrections(yawDeg: 40));
+    expect(tate.scene.motion!.to.rotation.yawDeg, closeTo(40 - 6, 1e-9));
+    expect(tate.scene.motion!.to.rotation.pitchDeg, -32);
+  });
+
+  test('degenerate or out-of-frame prize box yields no plan instead of NaN', () {
+    final r = _sample();
+    final outside = engine.plan(r, corrections: const SceneCorrections(prizeBbox: NBox(1.2, 1.3, 1.5, 1.6)));
+    expect(outside.canPlan, isFalse);
+    expect(outside.warnings.any((w) => w.contains('경품')), isTrue);
+    final ok = engine.plan(r);
+    for (final s in ok.steps) {
+      expect(s.fieldPoint.x.isFinite && s.fieldPoint.y.isFinite && s.fieldPoint.z.isFinite, isTrue);
+    }
+    expect(ok.scene.camera.target.x.isFinite, isTrue);
+  });
+
+  test('a synthesized bar gap never forbids 横ハメ; only detected bars do', () {
+    final r = _sample();
+    final noBars = r.copyWith(
+      objects: r.objects.where((o) => !o.kind.isBar).toList(),
+      strategy: const Strategy(targetObjectId: 'box1'), // no technique proposed
+    );
+    final plan = engine.plan(noBars, prize: PrizeSpec.defaultFigureBox); // 300 g → light
+    expect(plan.technique, Technique.yokoHame);
+    expect(plan.warnings.any((w) => w.contains('横ハメ가 불가능')), isFalse);
+    expect(plan.warnings.any((w) => w.contains('간격')), isTrue);
+    expect(plan.rationale.any((w) => w.contains('무거운')), isFalse);
+  });
+
+  test('pull-forward step is played once, then the 縦ハメ plays alternate', () {
+    final r = _sample();
+    const back = SceneCorrections(boxYOffsetMm: -60);
+    expect(engine.plan(r, corrections: back).currentStepIndex, 0);
+    final obs = <Observation>[];
+    final seen = <int>[];
+    for (var i = 0; i < 4; i++) {
+      obs.add(const Observation(ObservationKind.smallMove));
+      seen.add(engine.plan(r, corrections: back, observations: obs).currentStepIndex);
+    }
+    expect(seen, [1, 2, 1, 2]);
+  });
 }
