@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../engine/aim_engine.dart';
 import '../l10n/strings.dart';
 import '../models/analysis.dart';
+import '../screens/guide_screen.dart' show openGuideDetail;
 import 'arm_style.dart';
 
 /// Scrollable explanation of [plan] and the underlying [analysis].
@@ -44,6 +45,14 @@ class ExplanationTab extends StatelessWidget {
             ),
           ),
           _kv(context, s.armPower, '${s.armPowerLabel(plan.armPowerEstimate)} (${s.estimated})'),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => openGuideDetail(context, plan.layoutType),
+              icon: const Icon(Icons.menu_book_outlined, size: 18),
+              label: Text(s.guideOpenThis),
+            ),
+          ),
           if (analysis.explanation.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(s.llmExplanation, style: theme.textTheme.labelLarge),
@@ -81,6 +90,7 @@ class ExplanationTab extends StatelessWidget {
           _kv(context, s.armPower, s.armPowerLabel(analysis.machine.armPower)),
           _kv(context, s.assistLamp, s.assistLampLabel(analysis.machine.assistLamp)),
           _kv(context, s.exitSide, s.exitSideLabel(analysis.machine.exitSide)),
+          _kv(context, s.clawRotationTitle, s.clawRotationLabel(plan.clawRotation)),
         ]),
         _section(context, s.sectionAnalysis, [
           _kv(context, s.provider, [analysis.provider, analysis.model].where((e) => e.isNotEmpty).join(' · ')),

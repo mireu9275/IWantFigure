@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iwantfigure/engine/aim_engine.dart';
+import 'package:iwantfigure/l10n/guide_content.dart';
 import 'package:iwantfigure/models/analysis.dart';
+import 'package:iwantfigure/screens/guide_screen.dart';
 import 'package:iwantfigure/screens/result_screen.dart';
 import 'package:iwantfigure/services/history_store.dart';
 import 'package:iwantfigure/services/session_controller.dart';
@@ -303,5 +305,172 @@ void main() {
     expect(find.text('1234 ms'), findsOneWidget);
     expect(find.text(s.analysisIdLabel), findsOneWidget);
     expect(find.text('an-42'), findsOneWidget);
+  });
+
+  /// Pushes a route and lets the transition finish without `pumpAndSettle`
+  /// (the result screen hosts an endlessly animating 3D view).
+  Future<void> pumpTransition(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  testWidgets('tapping the layout title opens the guide for that layout', (tester) async {
+    usePhoneViewport(tester);
+    final settings = await loadedSettings();
+    final dir = tempHistoryDir('title_guide');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final history = HistoryStore(directory: dir);
+    await tester.runAsync(history.load);
+    final c = (await tester.runAsync(readyController))!;
+    final s = stringsFor('ko');
+    final type = c.plan!.layoutType;
+
+    await tester.pumpWidget(testApp(settings: settings, history: history, home: ResultScreen(controller: c)));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // The title is a button with an info icon.
+    expect(find.byTooltip(s.guideAboutLayout), findsOneWidget);
+    expect(find.byIcon(Icons.info_outline), findsOneWidget);
+    expect(find.text(s.layoutLabel(type)), findsOneWidget);
+    await tester.tap(find.text(s.layoutLabel(type)));
+    await pumpTransition(tester);
+
+    expect(find.byType(GuideDetailScreen), findsOneWidget);
+    expect(tester.widget<GuideDetailScreen>(find.byType(GuideDetailScreen)).type, type);
+    expect(find.text(guideFor(type, s).summary), findsOneWidget);
+    expect(find.text(s.guideRecognize), findsOneWidget);
+    expect(find.text(s.guideHowTo), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('claw rotation selector updates the corrections, the plan and the step card', (tester) async {
+    usePhoneViewport(tester);
+    final settings = await loadedSettings();
+    final dir = tempHistoryDir('rotation');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final history = HistoryStore(directory: dir);
+    await tester.runAsync(history.load);
+    final c = (await tester.runAsync(readyController))!;
+    final s = stringsFor('ko');
+
+    await tester.pumpWidget(testApp(settings: settings, history: history, home: ResultScreen(controller: c)));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(c.corrections.clawRotation, ClawRotation.unknown);
+    expect(c.plan!.clawRotation, ClawRotation.unknown);
+    expect(find.text(s.clawRotationTitle), findsOneWidget);
+    for (final r in ClawRotation.values) {
+      expect(find.text(s.clawRotationLabel(r)), findsOneWidget, reason: '$r chip');
+    }
+    expect(find.text(s.clawRotationShort(ClawRotation.clockwise)), findsNothing);
+    // Unknown twist → the engine asks the player to observe it.
+    expect(c.plan!.warnings.any((w) => w.contains('시계')), isTrue);
+    final stepIndex = c.plan!.steps.indexWhere((st) => st.arm != Arm.both);
+    expect(stepIndex, greaterThanOrEqualTo(0));
+    final before = c.plan!.steps[stepIndex].clawPoint;
+
+    await tester.tap(find.text(s.clawRotationLabel(ClawRotation.clockwise)));
+    await tester.pump(); // microtask recompute
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(c.corrections.clawRotation, ClawRotation.clockwise);
+    expect(c.plan!.clawRotation, ClawRotation.clockwise);
+    // The claw centre moved to compensate for the twist; the chip appears on
+    // the step card and the rationale explains it.
+    expect(c.plan!.steps[stepIndex].clawPoint, isNot(before));
+    expect(find.text(s.clawRotationShort(ClawRotation.clockwise)), findsOneWidget);
+    expect(c.plan!.rationale.any((r) => r.contains('시계')), isTrue);
+    expect(c.plan!.warnings.any((w) => w.contains('시계')), isFalse);
+
+    // Counter-clockwise swaps the chip; "none" removes it and the warning.
+    await tester.tap(find.text(s.clawRotationLabel(ClawRotation.counterClockwise)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(c.plan!.clawRotation, ClawRotation.counterClockwise);
+    expect(find.text(s.clawRotationShort(ClawRotation.counterClockwise)), findsOneWidget);
+    expect(find.text(s.clawRotationShort(ClawRotation.clockwise)), findsNothing);
+
+    await tester.tap(find.text(s.clawRotationLabel(ClawRotation.none)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(c.corrections.clawRotation, ClawRotation.none);
+    expect(c.plan!.clawRotation, ClawRotation.none);
+    expect(c.plan!.steps[stepIndex].clawPoint, before);
+    expect(find.text(s.clawRotationShort(ClawRotation.counterClockwise)), findsNothing);
+    expect(c.plan!.warnings.any((w) => w.contains('시계')), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('geometry reset in edit mode keeps the observed claw rotation', (tester) async {
+    usePhoneViewport(tester);
+    final settings = await loadedSettings();
+    final dir = tempHistoryDir('reset_rotation');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final history = HistoryStore(directory: dir);
+    await tester.runAsync(history.load);
+    final c = (await tester.runAsync(readyController))!;
+    final s = stringsFor('ko');
+
+    await tester.pumpWidget(testApp(settings: settings, history: history, home: ResultScreen(controller: c)));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.text(s.clawRotationLabel(ClawRotation.clockwise)));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    c.setCorrections(c.corrections.copyWith(yawDeg: 10));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text(s.correctHint), findsOneWidget);
+    await tester.tap(find.text(s.reset));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(c.corrections.yawDeg, isNull);
+    expect(c.corrections.clawRotation, ClawRotation.clockwise);
+    expect(c.plan!.clawRotation, ClawRotation.clockwise);
+  });
+
+  testWidgets('explanation tab links to the guide for this layout and lists the twist', (tester) async {
+    usePhoneViewport(tester);
+    final settings = await loadedSettings(initial: {'locale': 'en'});
+    final dir = tempHistoryDir('explain_guide');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final history = HistoryStore(directory: dir);
+    await tester.runAsync(history.load);
+    final photo = (await tester.runAsync(fakePhoto))!;
+    final c = SessionController(photo: photo, service: FakeAnalysisService(sampleAnalysis()), locale: 'en');
+    await tester.runAsync(c.analyze);
+    expect(c.state, SessionState.ready);
+    final s = stringsFor('en');
+    final type = c.plan!.layoutType;
+
+    await tester.pumpWidget(testApp(settings: settings, history: history, home: ResultScreen(controller: c)));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text(s.tabExplain));
+    await pumpTransition(tester);
+
+    expect(find.text(s.guideOpenThis), findsOneWidget);
+    // The machine section shows the twist value next to the selector's copy
+    // in the bottom panel.
+    await tester.dragUntilVisible(find.text(s.sectionMachine), find.byType(ListView), const Offset(0, -250));
+    expect(find.text(s.clawRotationTitle), findsNWidgets(2));
+    // The summary card (with the button) has scrolled out of the lazy list:
+    // scroll back to the top before tapping.
+    await tester.drag(find.byType(ListView), const Offset(0, 3000));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text(s.guideOpenThis), findsOneWidget);
+    expect(tester.getRect(find.text(s.guideOpenThis)).top, greaterThanOrEqualTo(0));
+
+    await tester.tap(find.text(s.guideOpenThis));
+    await pumpTransition(tester);
+    expect(find.byType(GuideDetailScreen), findsOneWidget);
+    expect(tester.widget<GuideDetailScreen>(find.byType(GuideDetailScreen)).type, type);
+    expect(find.text(s.guideHowTo), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -8,15 +8,18 @@ import 'package:flutter/material.dart';
 
 import '../engine/aim_engine.dart';
 import '../l10n/strings.dart';
+import '../models/analysis.dart' show LayoutType;
 import '../scene3d/scene_painter.dart' show SceneLabels;
 import '../scene3d/scene_view.dart';
 import '../services/history_store.dart';
 import '../services/session_controller.dart';
+import '../widgets/claw_rotation_selector.dart';
 import '../widgets/explanation_tab.dart';
 import '../widgets/observation_bar.dart';
 import '../widgets/photo_overlay.dart';
 import '../widgets/prize_sheet.dart';
 import '../widgets/step_card.dart';
+import 'guide_screen.dart';
 
 /// Shows the [AimPlan] of [controller]. When the controller is read-only
 /// (reopened from history) the observation controls are hidden.
@@ -131,7 +134,9 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
         final scheme = Theme.of(context).colorScheme;
         return Scaffold(
           appBar: AppBar(
-            title: Text(plan == null ? s.appName : s.layoutLabel(plan.layoutType), maxLines: 1, overflow: TextOverflow.ellipsis),
+            title: plan == null
+                ? Text(s.appName, maxLines: 1, overflow: TextOverflow.ellipsis)
+                : _titleButton(context, s, plan.layoutType),
             actions: [
               if (_tabs.index == 0 && plan != null && plan.canPlan && !c.readOnly)
                 IconButton(
@@ -224,7 +229,11 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                   const SizedBox(width: 8),
                   Expanded(child: Text(s.correctHint, style: Theme.of(context).textTheme.bodySmall)),
                   TextButton(
-                    onPressed: c.corrections.isEmpty ? null : () => c.setCorrections(SceneCorrections.none),
+                    // Resets the geometry only; the observed claw twist is
+                    // not part of the photo geometry and is kept.
+                    onPressed: c.corrections.copyWith(clear: const {'clawRotation'}).isEmpty
+                        ? null
+                        : () => c.setCorrections(SceneCorrections(clawRotation: c.corrections.clawRotation)),
                     child: Text(s.reset),
                   ),
                   FilledButton.tonal(
@@ -279,6 +288,13 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                     canUndo: c.observations.isNotEmpty,
                     enabled: plan.canPlan,
                   ),
+                  if (plan.canPlan) ...[
+                    const SizedBox(height: 4),
+                    ClawRotationSelector(
+                      value: c.corrections.clawRotation,
+                      onChanged: (r) => c.setCorrections(c.corrections.copyWith(clawRotation: r)),
+                    ),
+                  ],
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
@@ -292,6 +308,31 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// The layout name as a button: tapping it opens the guide for that layout.
+  Widget _titleButton(BuildContext context, S s, LayoutType type) {
+    final theme = Theme.of(context);
+    final titleStyle = theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge;
+    return Tooltip(
+      message: s.guideAboutLayout,
+      child: TextButton(
+        onPressed: () => openGuideDetail(context, type),
+        style: TextButton.styleFrom(
+          foregroundColor: theme.colorScheme.onSurface,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          textStyle: titleStyle,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(child: Text(s.layoutLabel(type), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 6),
+            Icon(Icons.info_outline, size: 20, color: theme.colorScheme.primary),
+          ],
         ),
       ),
     );

@@ -11,6 +11,7 @@ import '../services/history_store.dart';
 import '../services/image_prep.dart';
 import '../services/session_controller.dart';
 import 'analyzing_screen.dart';
+import 'guide_screen.dart';
 import 'result_screen.dart';
 import 'settings_screen.dart';
 
@@ -243,6 +244,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ],
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.menu_book_outlined),
+                  title: Text(s.guideTitle),
+                  subtitle: Text(s.guideSubtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const GuideScreen()),
+                  ),
+                ),
+              ),
               const SizedBox(height: 20),
               Text(s.historyTitle, style: theme.textTheme.titleMedium),
               const SizedBox(height: 6),

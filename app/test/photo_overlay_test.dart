@@ -173,4 +173,106 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(zoomEvents, [true, false]);
   });
+
+  /// The bundled sample plus a middle bar and a far front bar (4-bar setup).
+  AnalysisResult fourBarAnalysis() {
+    final a = sampleAnalysis();
+    return a.copyWith(objects: [
+      ...a.objects,
+      const DetectedObject(id: 'bar_mid', kind: ObjectKind.bar, bbox: NBox(0.13, 0.60, 0.87, 0.63)),
+      const DetectedObject(id: 'bar_far', kind: ObjectKind.bar, bbox: NBox(0.10, 0.90, 0.90, 0.93)),
+    ]);
+  }
+
+  testWidgets('paints extra bars and a known claw rotation without exceptions', (tester) async {
+    final bytes = (await tester.runAsync(fakePngBytes))!;
+    final analysis = fourBarAnalysis();
+    const engine = AimEngine();
+    for (final rot in ClawRotation.values) {
+      final corrections = SceneCorrections(clawRotation: rot);
+      final plan = engine.plan(analysis, corrections: corrections);
+      expect(plan.overlay!.extraBars.length, 2);
+      expect(plan.barCount, 4);
+      expect(plan.clawRotation, rot);
+      for (final editing in [false, true]) {
+        await tester.pumpWidget(host(PhotoOverlay(
+          imageBytes: bytes,
+          imageWidth: 64,
+          imageHeight: 48,
+          plan: plan,
+          corrections: corrections,
+          editing: editing,
+          onCorrectionsChanged: (_) {},
+          otherObjects: analysis.objects,
+        )));
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(find.byType(CustomPaint), findsWidgets);
+        expect(tester.takeException(), isNull, reason: '$rot editing=$editing');
+      }
+    }
+    // Also in Japanese and English, since the glyph/bar labels are localized.
+    for (final locale in [AppLocale.ja, AppLocale.en]) {
+      final plan = engine.plan(analysis, corrections: const SceneCorrections(clawRotation: ClawRotation.counterClockwise));
+      await tester.pumpWidget(MaterialApp(
+        home: LocaleScope(
+          strings: S(locale),
+          child: Scaffold(
+            body: SizedBox(
+              width: 320,
+              height: 240,
+              child: PhotoOverlay(
+                imageBytes: bytes,
+                imageWidth: 64,
+                imageHeight: 48,
+                plan: plan,
+                corrections: const SceneCorrections(clawRotation: ClawRotation.counterClockwise),
+                editing: false,
+                onCorrectionsChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.takeException(), isNull, reason: '$locale');
+    }
+  });
+
+  testWidgets('dragging in edit mode keeps the claw rotation correction', (tester) async {
+    final bytes = (await tester.runAsync(fakePngBytes))!;
+    final analysis = sampleAnalysis();
+    const corrections = SceneCorrections(clawRotation: ClawRotation.counterClockwise, yawDeg: 5);
+    final plan = const AimEngine().plan(analysis, corrections: corrections);
+    final emitted = <SceneCorrections>[];
+
+    await tester.pumpWidget(host(PhotoOverlay(
+      imageBytes: bytes,
+      imageWidth: 64,
+      imageHeight: 48,
+      plan: plan,
+      corrections: corrections,
+      editing: true,
+      onCorrectionsChanged: emitted.add,
+      throttle: Duration.zero,
+    )));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final box = tester.getRect(find.byType(PhotoOverlay));
+    final mapper = OverlayMapper(viewport: box.size, imageWidth: 64, imageHeight: 48);
+    final bbox = plan.overlay!.prizeBbox;
+    final corner = box.topLeft + mapper.toWidget(Pt(bbox.x2, bbox.y2));
+
+    final gesture = await tester.startGesture(corner);
+    await tester.pump(const Duration(milliseconds: 20));
+    await gesture.moveBy(const Offset(15, 10));
+    await tester.pump(const Duration(milliseconds: 20));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(emitted, isNotEmpty);
+    expect(emitted.last.prizeBbox, isNotNull);
+    expect(emitted.last.clawRotation, ClawRotation.counterClockwise);
+    expect(emitted.last.yawDeg, 5);
+    expect(tester.takeException(), isNull);
+  });
 }

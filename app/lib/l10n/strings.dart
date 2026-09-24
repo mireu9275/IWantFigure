@@ -280,6 +280,67 @@ class S {
   String get labelMotion => _t('예상 이동', '予想の動き', 'Expected motion');
   String get barsEstimated => _t('바 위치 추정됨', 'バー位置は推定', 'Bars estimated');
 
+  /// Label for the n-th bar in a 3-/4-bar setup (bars 1 and 2 are the
+  /// front/back pair).
+  String labelExtraBar(int n) => _t('바 $n', 'バー$n', 'Bar $n');
+
+  /// Short word next to the curved-arrow glyph on the overlay.
+  String labelRotation(ClawRotation r) => switch (r) {
+        ClawRotation.clockwise => _t('시계', '時計回り', 'CW'),
+        ClawRotation.counterClockwise => _t('반시계', '反時計回り', 'CCW'),
+        ClawRotation.none => _t('회전 없음', '回転なし', 'No twist'),
+        ClawRotation.unknown => unknown,
+      };
+
+  // Claw rotation (observed by the player on the first play)
+  String get clawRotationTitle => _t('집게 회전 (하강 시)', 'アームの回転（下降時）', 'Claw twist while descending');
+  String get clawRotationHint => _t(
+        '첫 플레이에서 집게가 내려가며 어느 쪽으로 도는지 보고 고르세요 (위에서 볼 때)',
+        '1手目でアームが下降中にどちらへ回るかを見て選んでください（上から見て）',
+        'Watch which way the claw twists while descending on the first play (seen from above)',
+      );
+  String clawRotationLabel(ClawRotation r) => switch (r) {
+        ClawRotation.unknown => _t('모름', '不明', 'Unknown'),
+        ClawRotation.none => _t('없음', 'なし', 'None'),
+        ClawRotation.clockwise => _t('시계 방향', '時計回り', 'Clockwise'),
+        ClawRotation.counterClockwise => _t('반시계 방향', '反時計回り', 'Counter-clockwise'),
+      };
+
+  /// Compact chip text for the step card, e.g. "시계" (shown next to a rotation icon).
+  String clawRotationShort(ClawRotation r) => switch (r) {
+        ClawRotation.clockwise => _t('시계', '時計', 'CW'),
+        ClawRotation.counterClockwise => _t('반시계', '反時計', 'CCW'),
+        ClawRotation.none => _t('회전 없음', '回転なし', 'No twist'),
+        ClawRotation.unknown => unknown,
+      };
+
+  // ---------------------------------------------------------------------------
+  // Layout-type guide (기초 가이드)
+
+  String get guideTitle => _t('배치 유형 가이드', '設置パターンガイド', 'Layout guide');
+  String get guideSubtitle {
+    final n = LayoutType.values.length;
+    return _t(
+      '$n가지 배치를 알아보고 어디를 노릴지 익히세요',
+      '$n種類の設置パターンと狙い方を学ぶ',
+      'Recognise $n layouts and learn where to aim at each',
+    );
+  }
+
+  String get guideOpenThis => _t('이 유형 가이드 보기', 'このパターンのガイドを見る', 'View guide for this layout');
+  String get guideAboutLayout => _t('배치 유형 가이드 열기', '設置パターンのガイドを開く', 'Open the layout guide');
+  String get guideRecognize => _t('알아보기', '見分け方', 'How to recognise it');
+  String get guideHowTo => _t('이렇게 노리기', '狙い方', 'How to aim');
+  String get guideTechniques => _t('기법', 'テクニック', 'Techniques');
+  String get guideTips => _t('팁', 'コツ', 'Tips');
+  String get guideAbort => _t('이럴 땐 철수', 'こうなったら撤退', 'When to walk away');
+  String get guideCost => _t('참고 비용', '参考費用', 'Typical cost');
+  String get guideCostNote => _t(
+        '★ 표시는 일본 공략 커뮤니티의 참고치이며 매장·경품·설정에 따라 크게 다릅니다.',
+        '★はコミュニティの参考値で、店舗・景品・設定により大きく異なります。',
+        '★ marks community reference figures; they vary widely by store, prize and setting.',
+      );
+
   // 3D scene labels and controls
   String get sceneFront => _t('앞 (手前)', '手前', 'Front (手前)');
   String get resetView => _t('시점 초기화', '視点をリセット', 'Reset view');

@@ -17,7 +17,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:iwantfigure/app/app.dart';
+import 'package:iwantfigure/models/analysis.dart';
 import 'package:iwantfigure/screens/analyzing_screen.dart';
+import 'package:iwantfigure/screens/guide_screen.dart';
 import 'package:iwantfigure/screens/result_screen.dart';
 import 'package:iwantfigure/screens/settings_screen.dart';
 import 'package:iwantfigure/services/face_blur.dart';
@@ -60,7 +62,7 @@ Future<void> _loadFonts() async {
 /// A synthetic "front view of a bridge setup" photo whose geometry matches
 /// the bundled sample analysis (box at 0.36–0.64 × 0.42–0.74, bars at
 /// y≈0.515 and 0.715, claw at the top centre).
-Uint8List _machinePhoto({int w = 1456, int h = 1092}) {
+Uint8List _machinePhoto({int w = 1456, int h = 1092, bool midBar = false}) {
   final im = img.Image(width: w, height: h);
   // Background gradient (cabinet interior).
   for (var y = 0; y < h; y++) {
@@ -73,7 +75,7 @@ Uint8List _machinePhoto({int w = 1456, int h = 1092}) {
   // Floor / drop area.
   img.fillRect(im, x1: 0, y1: (h * 0.76).round(), x2: w, y2: h, color: img.ColorRgb8(150, 60, 70));
   // Bars.
-  for (final cy in [0.515, 0.715]) {
+  for (final cy in [0.515, if (midBar) 0.615, 0.715]) {
     final y = (h * cy).round();
     img.fillRect(im, x1: (w * 0.12).round(), y1: y - 12, x2: (w * 0.88).round(), y2: y + 12, color: img.ColorRgb8(170, 175, 185));
     img.fillRect(im, x1: (w * 0.12).round(), y1: y - 12, x2: (w * 0.88).round(), y2: y - 6, color: img.ColorRgb8(230, 232, 236));
@@ -173,6 +175,31 @@ void main() {
     await _shoot(tester, key, 'home_ko');
   });
 
+  testWidgets('guide screens', (tester) async {
+    _phone(tester);
+    final key = GlobalKey();
+    final dir = tempHistoryDir('shot_guide');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final history = HistoryStore(directory: dir);
+    await tester.runAsync(history.load);
+    final settings = await loadedSettings();
+    await tester.pumpWidget(_app(key: key, settings: settings, history: history, home: const GuideScreen()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await _shoot(tester, key, 'guide_list_ko');
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    await tester.pumpWidget(_app(
+      key: key,
+      settings: settings,
+      history: history,
+      home: const GuideDetailScreen(type: LayoutType.bridgeParallel),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await _shoot(tester, key, 'guide_detail_ko');
+  });
+
   for (final code in ['ko', 'ja', 'en']) {
     testWidgets('result screens ($code)', (tester) async {
       _phone(tester);
@@ -183,12 +210,20 @@ void main() {
       await tester.runAsync(history.load);
       final settings = await loadedSettings(initial: {'locale': code});
 
-      final photoBytes = _machinePhoto();
+      final threeBars = code == 'ko';
+      final photoBytes = _machinePhoto(midBar: threeBars);
       final photoFile = File('${dir.path}/machine.jpg')..writeAsBytesSync(photoBytes);
       final picker = PhotoPicker(picker: FakeImagePicker(XFile(photoFile.path)));
+      var analysis = sampleAnalysis();
+      if (threeBars) {
+        analysis = analysis.copyWith(objects: [
+          ...analysis.objects,
+          const DetectedObject(id: 'bar_mid', kind: ObjectKind.bar, bbox: NBox(0.12, 0.60, 0.88, 0.63)),
+        ]);
+      }
       final controller = SessionController(
         photo: PickedPhoto(bytes: photoBytes, width: 1456, height: 1092, path: photoFile.path),
-        service: FakeAnalysisService(sampleAnalysis()),
+        service: FakeAnalysisService(analysis),
         locale: code,
         history: history,
       );
@@ -219,6 +254,26 @@ void main() {
       await _shoot(tester, key, 'result_explain_$code');
 
       if (code == 'ko') {
+        // Claw twist observed → compensation shown on the photo and in 3D.
+        await tester.dragUntilVisible(
+          find.text(strings.clawRotationLabel(ClawRotation.clockwise)),
+          find.byType(Scrollable).last,
+          const Offset(0, -80),
+        );
+        await tester.tap(find.text(strings.clawRotationLabel(ClawRotation.clockwise)));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text(strings.tabPhoto));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await _shoot(tester, key, 'result_rotation_ko');
+        await tester.tap(find.text(strings.tab3d));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 900));
+        await _shoot(tester, key, 'result_3d_rotation_ko');
+        await tester.tap(find.text(strings.tabPhoto));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         // Correction mode on the photo tab.
         await tester.tap(find.text(strings.tabPhoto));
         await tester.pump();

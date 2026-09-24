@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../engine/aim_engine.dart';
 import '../l10n/strings.dart';
+import '../models/analysis.dart';
 import 'arm_style.dart';
 
 /// Shows the current [AimStep]: index/total, arm badge, technique chip,
@@ -78,6 +79,22 @@ class CurrentStepCard extends StatelessWidget {
                         labelStyle: const TextStyle(fontSize: 11),
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
+                      // Observed claw twist the plan compensates for.
+                      if (plan.clawRotation.isKnown)
+                        Chip(
+                          avatar: Icon(
+                            plan.clawRotation == ClawRotation.clockwise ? Icons.rotate_right : Icons.rotate_left,
+                            size: 14,
+                            color: scheme.onTertiaryContainer,
+                          ),
+                          label: Text(s.clawRotationShort(plan.clawRotation)),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          labelStyle: TextStyle(fontSize: 11, color: scheme.onTertiaryContainer),
+                          backgroundColor: scheme.tertiaryContainer,
+                          side: BorderSide.none,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                     ],
                   ),
                 ),

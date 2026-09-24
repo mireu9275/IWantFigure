@@ -518,6 +518,7 @@ class _WorkingGeometry {
       claw: base.claw,
       yawDeg: base.yawDeg,
       boxYOffsetMm: base.boxYOffsetMm,
+      clawRotation: base.clawRotation,
     );
   }
 }
@@ -632,6 +633,22 @@ class _OverlayPainter extends CustomPainter {
 
     bar(g.backBar, strings.labelBackBar, activeHandle == OverlayHandle.backBar);
     bar(g.frontBar, strings.labelFrontBar, activeHandle == OverlayHandle.frontBar);
+
+    // Extra bars of a 3-/4-bar setup: thinner, not editable, numbered after
+    // the front/back pair ("바 3", "바 4").
+    final extras = plan.overlay?.extraBars ?? const <List<Pt>>[];
+    final thin = Paint()
+      ..color = _barColor.withValues(alpha: 0.75)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    for (var i = 0; i < extras.length; i++) {
+      final line = extras[i];
+      if (line.length < 2) continue;
+      final a = mapper.toWidget(line[0]);
+      final b = mapper.toWidget(line[1]);
+      canvas.drawLine(a, b, thin);
+      _label(canvas, strings.labelExtraBar(i + 3), a + const Offset(4, 6), _barColor, small: true);
+    }
   }
 
   void _paintPrize(Canvas canvas, _WorkingGeometry g) {
@@ -733,6 +750,38 @@ class _OverlayPainter extends CustomPainter {
       claw + const Offset(ring + 12, -ring),
       color,
     );
+    _paintRotationGlyph(canvas, claw + const Offset(-(ring + 18), -ring - 2));
+  }
+
+  /// Small curved arrow (~18 px) showing the observed twist of the claw
+  /// while it descends. Clockwise on screen for [ClawRotation.clockwise].
+  void _paintRotationGlyph(Canvas canvas, Offset centre) {
+    final rot = plan.clawRotation;
+    if (!rot.isKnown) return;
+    const r = 9.0;
+    final cw = rot == ClawRotation.clockwise;
+    // Canvas angles grow clockwise on screen (y points down), so a positive
+    // sweep draws a clockwise arc.
+    const start = -math.pi / 2;
+    final sweep = (cw ? 1 : -1) * math.pi * 1.5;
+    canvas.drawCircle(centre, r + 6, Paint()..color = Colors.black.withValues(alpha: 0.5));
+    canvas.drawArc(
+      Rect.fromCircle(center: centre, radius: r),
+      start,
+      sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white,
+    );
+    final endAngle = start + sweep;
+    final end = centre + Offset(math.cos(endAngle), math.sin(endAngle)) * r;
+    // Unit tangent in the direction of travel at the end of the arc.
+    final tangent = Offset(-math.sin(endAngle), math.cos(endAngle)) * (cw ? 1 : -1);
+    _arrowHead(canvas, end - tangent * 8, end + tangent * 2, Paint()..color = Colors.white, 8);
+    _label(canvas, strings.labelRotation(rot), centre + const Offset(-r - 4, r + 8), _clawColor, small: true);
   }
 
   void _paintHandles(Canvas canvas, _WorkingGeometry g) {

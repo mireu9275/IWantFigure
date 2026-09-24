@@ -68,11 +68,12 @@ IWantFigure/
 | `lib/scene3d/` | 소프트웨어 3D 렌더러(`OrbitCamera`, `ScenePainter`, `SceneView`) | 외부 패키지 없음 |
 | `lib/services/` | `SettingsStore`(SharedPreferences), `AnalyzeApi`/`MockAnalyzeApi`, `PhotoPicker`(image_picker), `HistoryStore`(문서 폴더 JSON + 사진 복사, 원자적 저장), `SessionController`(분석·보정·관찰·플랜 재계산), **`face_blur.dart`**(얼굴 모자이크, 순수 Dart) + **`mlkit_face_detector.dart`**(ML Kit 온디바이스 검출) | |
 | `lib/app/` | `IWantFigureApp`, `AppScope`(설정·히스토리·서비스 주입) | |
-| `lib/screens/` | `HomeScreen` → `AnalyzingScreen` → `ResultScreen`(사진/3D/설명 탭) , `SettingsScreen` | |
-| `lib/widgets/` | `PhotoOverlay`(오버레이·보정 핸들·줌), `CurrentStepCard`, `ObservationBar`, `PrizeSheet`, `ExplanationTab`, `ArmBadge` | |
+| `lib/screens/` | `HomeScreen` → `AnalyzingScreen` → `ResultScreen`(사진/3D/설명 탭), `SettingsScreen`, `GuideScreen`/`GuideDetailScreen`(유형별 기초 가이드) | |
+| `lib/l10n/guide_content.dart` | 15개 배치 유형의 가이드 본문(ko/ja/en): 알아보기·이렇게 노리기·기법·팁·철수·참고 비용, `layoutIcon` | 출처는 `docs/01` 3장, `docs/research/domain.md` |
+| `lib/widgets/` | `PhotoOverlay`(오버레이·보정 핸들·줌·추가 바·회전 글리프), `CurrentStepCard`, `ObservationBar`, `ClawRotationSelector`, `PrizeSheet`, `ExplanationTab`, `ArmBadge` | |
 | `lib/l10n/strings.dart` | ko/ja/en 문자열(`S.of(context)`) | 사용자 노출 문자열은 전부 여기 |
 | `assets/samples/` | 모크용 샘플 응답 | `shared/samples`의 복사본 |
-| `test/` | 엔진 15, 3D 16, UI·서비스·블러·동의 60 = 91건 | `flutter test` |
+| `test/` | 엔진 17, 3D 18, UI·서비스·블러·동의·가이드 81 = 116건 | `flutter test` |
 
 ### 3.2 좌표계 두 가지
 
@@ -90,6 +91,8 @@ IWantFigure/
 3. **기법 선택**: LLM 제안이 해당 유형의 허용 목록에 있으면 채택, 아니면 기본값. 橋渡し는 무게(≥350 g → 縦ハメ, 아니면 横ハメ)와 바 간격(박스 폭보다 좁으면 横ハメ 불가 → 縦ハメ) 규칙 적용.
 4. **단계 생성**: 기법별 `(u, v, arm)` 규칙. 예) 縦ハメ = 오른쪽 아암 발톱을 `(1−inset, 0.5+side)`(안쪽 끝 오른쪽), 왼쪽 아암을 `(1−inset, 0.5−side)`로 교대. `inset`(기본 0.12, 약한 아암이면 0.06)과 `side`(0.22)는 `EngineOptions`에서 조정. 아암 중심 = 접점 ∓ 아암 개방폭/2.
 5. **현재 단계**: 관찰 수로 교대(`played % steps.length`). 前落とし는 이동 관찰 3회 후 押し込み 단계로, 乗り上げ는 들림/큰 이동 후 突き 단계로.
+5-1. **3·4본 바**: 검출된 바가 3개 이상이면 경품에 닿는(윗면~밑변 범위) 바 중 바깥 두 개를 지지 쌍으로 고르고, 나머지는 `OverlayGeometry.extraBars`와 3D 실린더로 표시한다. 근거 문구로 "박스가 걸친 두 바 사이가 낙하구, 중간 바에 걸리면 詰み 주의"를 덧붙인다.
+5-2. **집게 하강 회전**(`SceneCorrections.clawRotation`, 사용자가 첫 플레이에서 관찰): 시계/반시계 방향으로 `EngineOptions.clawRotationDeg`(기본 15°)만큼 발톱 접점 벡터를 회전시켜, 회전 후에도 발톱이 목표에 닿도록 아암 중심을 반대로 옮긴다. 위에서 봤을 때 X 오른쪽·Y 플레이어 쪽 좌표계에서 시계 방향이면 오른쪽 발톱은 手前 쪽으로 이동하므로 중심은 奥 쪽으로 보정된다. 모르면 관찰을 요청하는 경고를 낸다. 3D 뷰는 집게 아래에 회전 화살표를 그린다.
 6. **출력**: `AimPlan` = steps(현재 단계 포함) + overlay(사진용 기하) + scene(3D) + rationale/warnings/abortIf + finished(획득) 플래그.
 
 룰 근거는 `01_기획_기술_분석.md` 3장의 표와 동일하며, 모두 커뮤니티 휴리스틱(원문 재확인 필요 ★)이다. 수치는 실측으로 튜닝할 것.
