@@ -27,32 +27,66 @@ public sealed class InvalidImageException : Exception
 
 /// <summary>
 /// decode -> apply EXIF orientation -> downscale (long side &lt;= MaxImageLongSide, never upscale)
-/// -> strip metadata -> JPEG quality 85. Thread-safe; register as a singleton.
+/// -> strip metadata -> JPEG quality 85.
+///
+/// Memory safety: the header is inspected first (cheap, no pixel buffers) and images over the
+/// per-format pixel budget are rejected before decoding. Only JPEG can be decoded at reduced
+/// resolution; PNG/WebP are always decoded in full (4 bytes/pixel), so they get a smaller
+/// budget. A semaphore bounds how many decodes run at once. Thread-safe; register as a singleton.
 /// </summary>
 public sealed class ImagePipeline
 {
+    private const string JpegFormatName = "JPEG";
+
     // IImageFormat.Name values used by ImageSharp's built-in decoders.
-    private static readonly HashSet<string> AllowedFormats = new(StringComparer.OrdinalIgnoreCase) { "JPEG", "PNG", "WEBP" };
+    private static readonly HashSet<string> AllowedFormats = new(StringComparer.OrdinalIgnoreCase) { JpegFormatName, "PNG", "WEBP" };
 
     private readonly AnalysisOptions _options;
+    private readonly SemaphoreSlim _decodeGate;
 
     public ImagePipeline(IOptions<AnalysisOptions> options)
     {
         _options = options.Value;
+        int slots = Math.Max(1, _options.MaxConcurrentDecodes);
+        _decodeGate = new SemaphoreSlim(slots, slots);
     }
 
-    public PreparedImage Prepare(byte[] source)
+    /// <summary>Number of decodes that may run concurrently (for diagnostics/tests).</summary>
+    public int MaxConcurrentDecodes => Math.Max(1, _options.MaxConcurrentDecodes);
+
+    /// <summary>
+    /// Validates and prepares the image. Waits for a decode slot when <see cref="AnalysisOptions.MaxConcurrentDecodes"/>
+    /// images are already in flight; the wait is cancelled with <paramref name="ct"/>.
+    /// </summary>
+    public async Task<PreparedImage> PrepareAsync(byte[] source, CancellationToken ct)
     {
         if (source is null || source.Length == 0)
         {
             throw new InvalidImageException("missing_image", "image data is empty");
         }
 
-        int maxSide = Math.Max(64, _options.MaxImageLongSide);
+        // 1) Header-only checks: format, dimensions, pixel budget. No pixel buffers yet.
+        (IImageFormat format, ImageInfo info) = Inspect(source);
 
+        await _decodeGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            // 1) Cheap header-only checks before allocating pixel buffers.
+            return DecodeAndEncode(source, format, info);
+        }
+        finally
+        {
+            _decodeGate.Release();
+        }
+    }
+
+    /// <summary>Pixel budget for a format: JPEG can be decoded downscaled, everything else cannot.</summary>
+    internal long PixelBudgetFor(IImageFormat format) =>
+        format.Name.Equals(JpegFormatName, StringComparison.OrdinalIgnoreCase) ? _options.MaxImagePixels : _options.MaxImagePixelsNonJpeg;
+
+    private (IImageFormat Format, ImageInfo Info) Inspect(byte[] source)
+    {
+        try
+        {
             IImageFormat format = Image.DetectFormat(source);
             if (!AllowedFormats.Contains(format.Name))
             {
@@ -60,11 +94,28 @@ public sealed class ImagePipeline
             }
 
             ImageInfo info = Image.Identify(source);
-            if ((long)info.Width * info.Height > _options.MaxImagePixels)
+            long pixels = (long)info.Width * info.Height;
+            long budget = PixelBudgetFor(format);
+            if (pixels > budget)
             {
-                throw new InvalidImageException("image_too_large", $"image has {info.Width}x{info.Height} pixels, limit is {_options.MaxImagePixels}");
+                throw new InvalidImageException("image_too_large", $"{format.Name} image has {info.Width}x{info.Height} pixels, limit for this format is {budget}");
             }
 
+            return (format, info);
+        }
+        catch (ImageFormatException ex)
+        {
+            // UnknownImageFormatException (not an image) and InvalidImageContentException (truncated/corrupt).
+            throw new InvalidImageException("invalid_image", "the data is not a decodable JPEG/PNG/WebP image", ex);
+        }
+    }
+
+    private PreparedImage DecodeAndEncode(byte[] source, IImageFormat format, ImageInfo info)
+    {
+        int maxSide = Math.Max(64, _options.MaxImageLongSide);
+
+        try
+        {
             // 2) Decode. For photos larger than the bound, TargetSize lets ImageSharp decode at a
             //    reduced resolution (the JPEG decoder skips IDCT work) - much cheaper than decoding
             //    12 MP and shrinking afterwards. It is a decode+resize, so it must NOT be set for
@@ -116,8 +167,7 @@ public sealed class ImagePipeline
         }
         catch (ImageFormatException ex)
         {
-            // UnknownImageFormatException (not an image) and InvalidImageContentException (truncated/corrupt).
-            throw new InvalidImageException("invalid_image", "the data is not a decodable JPEG/PNG/WebP image", ex);
+            throw new InvalidImageException("invalid_image", $"the {format.Name} data is corrupt or truncated", ex);
         }
     }
 }

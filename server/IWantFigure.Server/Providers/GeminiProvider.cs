@@ -24,6 +24,8 @@ public sealed class GeminiProvider : IAnalysisProvider
     private readonly GeminiOptions _options;
     private readonly ILogger<GeminiProvider> _logger;
     private readonly JsonObject _responseSchema;
+    private readonly string? _apiKey;
+    private readonly string _model;
 
     public GeminiProvider(HttpClient http, IOptions<GeminiOptions> options, AnalysisSchema schema, ILogger<GeminiProvider> logger)
     {
@@ -31,15 +33,18 @@ public sealed class GeminiProvider : IAnalysisProvider
         _options = options.Value;
         _logger = logger;
         _responseSchema = GeminiSchemaConverter.Convert(schema.Root);
+        // Secrets mounted from files often end with a newline; trim so the header is well-formed.
+        _apiKey = _options.ApiKey?.Trim();
+        _model = string.IsNullOrWhiteSpace(_options.Model) ? new GeminiOptions().Model : _options.Model.Trim();
     }
 
     public string Name => "gemini";
 
-    public string Model => _options.Model;
+    public string Model => _model;
 
     public async Task<ProviderResult> AnalyzeAsync(PreparedImage image, AnalyzeRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        if (string.IsNullOrWhiteSpace(_apiKey))
         {
             throw new ProviderNotConfiguredException(Name);
         }
@@ -81,12 +86,21 @@ public sealed class GeminiProvider : IAnalysisProvider
         };
 
         // The key goes in a header, not in "?key=" - URLs end up in logs and proxies, headers do not.
-        string url = $"{_options.BaseUrl.TrimEnd('/')}/v1beta/models/{Uri.EscapeDataString(_options.Model)}:generateContent";
+        string url = $"{_options.BaseUrl.TrimEnd('/')}/v1beta/models/{Uri.EscapeDataString(_model)}:generateContent";
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
         };
-        httpRequest.Headers.TryAddWithoutValidation("x-goog-api-key", _options.ApiKey);
+        try
+        {
+            // Validating Add: a key with a stray CR/LF fails here, loudly, instead of producing a malformed request.
+            httpRequest.Headers.Add("x-goog-api-key", _apiKey);
+        }
+        catch (FormatException)
+        {
+            // Deliberately no inner exception: its message would contain the key.
+            throw new ProviderNotConfiguredException(Name, "Gemini:ApiKey contains characters that are not valid in an HTTP header");
+        }
 
         string responseText = await ProviderHttp.SendAsync(_http, httpRequest, Name, ct).ConfigureAwait(false);
         return ParseResponse(responseText);
@@ -103,13 +117,13 @@ public sealed class GeminiProvider : IAnalysisProvider
         if (root.TryGetProperty("promptFeedback", out JsonElement feedback) &&
             feedback.TryGetProperty("blockReason", out JsonElement blockReason))
         {
-            throw new ProviderException($"gemini: prompt blocked ({blockReason.GetString()})", isTransient: false);
+            throw new ProviderException($"gemini: prompt blocked ({blockReason.GetString()})", isTransient: false, publicMessage: "upstream declined to analyze this image");
         }
 
         if (!root.TryGetProperty("candidates", out JsonElement candidates) ||
             candidates.ValueKind != JsonValueKind.Array || candidates.GetArrayLength() == 0)
         {
-            throw new ProviderException("gemini: response has no candidates", isTransient: true);
+            throw new ProviderException("gemini: response has no candidates", isTransient: true, publicMessage: "upstream returned no answer");
         }
 
         JsonElement first = candidates[0];
@@ -136,11 +150,11 @@ public sealed class GeminiProvider : IAnalysisProvider
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            throw new ProviderException($"gemini: candidate has no text (finishReason={finishReason})", isTransient: finishReason is "" or "OTHER");
+            throw new ProviderException($"gemini: candidate has no text (finishReason={finishReason})", isTransient: finishReason is "" or "OTHER", publicMessage: "upstream returned no answer");
         }
         if (finishReason == "MAX_TOKENS")
         {
-            throw new ProviderException("gemini: output truncated (MAX_TOKENS); raise Gemini:MaxOutputTokens", isTransient: false);
+            throw new ProviderException("gemini: output truncated (MAX_TOKENS); raise Gemini:MaxOutputTokens", isTransient: false, publicMessage: "upstream output was truncated");
         }
 
         ProviderUsage? usage = null;

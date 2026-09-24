@@ -134,6 +134,46 @@ public class GeminiProviderTests
         Assert.True(ex.IsTransient);
         Assert.Contains("backend boom", ex.Message);
         Assert.Contains("500", ex.Message);
+        Assert.Equal("upstream returned HTTP 500", ex.PublicMessage);
+        Assert.DoesNotContain("backend boom", ex.PublicMessage);
+    }
+
+    [Fact]
+    public async Task Retry_after_header_is_parsed_into_the_exception()
+    {
+        var handler = new FakeHttpMessageHandler();
+        handler.Respond(HttpStatusCode.TooManyRequests, """{"error":{"message":"quota"}}""");
+        handler.Responses.Add(r => r.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(2)));
+
+        var ex = await Assert.ThrowsAsync<ProviderException>(() => Make(handler).AnalyzeAsync(Image, Req(), CancellationToken.None));
+
+        Assert.True(ex.IsTransient);
+        Assert.Equal(TimeSpan.FromSeconds(2), ex.RetryAfter);
+    }
+
+    [Fact]
+    public async Task Non_json_body_is_a_transient_error_with_a_generic_public_message()
+    {
+        var handler = new FakeHttpMessageHandler().RespondJson("<html>502 Bad Gateway from some proxy</html>");
+
+        var ex = await Assert.ThrowsAsync<ProviderException>(() => Make(handler).AnalyzeAsync(Image, Req(), CancellationToken.None));
+
+        Assert.True(ex.IsTransient);
+        Assert.Equal("upstream response was not valid JSON", ex.PublicMessage);
+    }
+
+    [Fact]
+    public async Task Api_key_and_model_are_trimmed_and_invalid_key_fails_clearly()
+    {
+        var ok = new FakeHttpMessageHandler().RespondJson(Canned(SampleJson.GeminiThousandths()));
+        await Make(ok, new GeminiOptions { ApiKey = "AIza-file-secret\n", Model = "gemini-2.5-flash \n" }).AnalyzeAsync(Image, Req(), CancellationToken.None);
+        Assert.Equal("AIza-file-secret", ok.Requests.Single().Headers.GetValues("x-goog-api-key").Single());
+        Assert.Contains("/models/gemini-2.5-flash:generateContent", ok.Requests.Single().RequestUri!.ToString());
+
+        var bad = new FakeHttpMessageHandler();
+        var ex = await Assert.ThrowsAsync<ProviderNotConfiguredException>(() => Make(bad, new GeminiOptions { ApiKey = "AIza\nbroken" }).AnalyzeAsync(Image, Req(), CancellationToken.None));
+        Assert.Empty(bad.Requests);
+        Assert.DoesNotContain("AIza", ex.Message);
     }
 
     [Fact]

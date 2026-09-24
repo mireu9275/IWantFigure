@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using IWantFigure.Server.Analysis;
 using IWantFigure.Server.Configuration;
 using IWantFigure.Server.Contracts;
@@ -35,11 +36,16 @@ public class AnalysisServiceTests
         }
     }
 
-    private static AnalysisService Service(IAnalysisProvider provider) => new(
-        new ImagePipeline(Options.Create(new AnalysisOptions())),
-        provider,
-        new AnalysisNormalizer(AnalysisSchema.Embedded),
-        NullLogger<AnalysisService>.Instance);
+    private static AnalysisService Service(IAnalysisProvider provider, int retryDelayMs = 0, int maxRetryDelayMs = 5000)
+    {
+        var options = new AnalysisOptions { RetryDelayMs = retryDelayMs, MaxRetryDelayMs = maxRetryDelayMs };
+        return new AnalysisService(
+            new ImagePipeline(Options.Create(options)),
+            provider,
+            new AnalysisNormalizer(AnalysisSchema.Embedded),
+            Options.Create(options),
+            NullLogger<AnalysisService>.Instance);
+    }
 
     private static AnalyzeRequest Request() => new()
     {
@@ -66,6 +72,46 @@ public class AnalysisServiceTests
         Assert.Equal(100, response.Image.Height);
         Assert.True(Guid.TryParse(response.AnalysisId, out _));
         Assert.Equal("bridge_parallel", response.LayoutType);
+    }
+
+    [Fact]
+    public async Task Retry_waits_the_configured_delay()
+    {
+        var provider = new ScriptedProvider(
+            () => throw new ProviderException("429", isTransient: true),
+            Good);
+        var stopwatch = Stopwatch.StartNew();
+
+        await Service(provider, retryDelayMs: 300).AnalyzeAsync(Request(), CancellationToken.None);
+
+        Assert.True(stopwatch.ElapsedMilliseconds >= 280, $"only waited {stopwatch.ElapsedMilliseconds} ms");
+        Assert.Equal(2, provider.Calls);
+    }
+
+    [Fact]
+    public async Task Retry_honours_upstream_retry_after_when_longer_than_the_default()
+    {
+        var provider = new ScriptedProvider(
+            () => throw new ProviderException("529 overloaded", isTransient: true, retryAfter: TimeSpan.FromMilliseconds(400)),
+            Good);
+        var stopwatch = Stopwatch.StartNew();
+
+        await Service(provider, retryDelayMs: 50).AnalyzeAsync(Request(), CancellationToken.None);
+
+        Assert.True(stopwatch.ElapsedMilliseconds >= 380, $"only waited {stopwatch.ElapsedMilliseconds} ms");
+    }
+
+    [Fact]
+    public async Task Retry_after_is_capped_so_the_phone_is_not_kept_waiting()
+    {
+        var provider = new ScriptedProvider(
+            () => throw new ProviderException("429", isTransient: true, retryAfter: TimeSpan.FromSeconds(120)),
+            Good);
+        var stopwatch = Stopwatch.StartNew();
+
+        await Service(provider, retryDelayMs: 0, maxRetryDelayMs: 200).AnalyzeAsync(Request(), CancellationToken.None);
+
+        Assert.InRange(stopwatch.ElapsedMilliseconds, 180, 5000);
     }
 
     [Fact]

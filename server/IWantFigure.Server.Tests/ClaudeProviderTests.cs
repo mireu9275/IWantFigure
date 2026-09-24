@@ -59,7 +59,7 @@ public class ClaudeProviderTests
         JsonElement root = body.RootElement;
 
         Assert.Equal("claude-sonnet-5", root.GetProperty("model").GetString());
-        Assert.Equal(2048, root.GetProperty("max_tokens").GetInt32());
+        Assert.Equal(8192, root.GetProperty("max_tokens").GetInt32());
         Assert.False(root.TryGetProperty("temperature", out _)); // Claude 5 rejects non-default sampling params
 
         // system prompt: shared prompt + pixel rule, marked cacheable
@@ -133,6 +133,51 @@ public class ClaudeProviderTests
     }
 
     [Fact]
+    public async Task Haiku_models_get_neither_effort_nor_thinking()
+    {
+        var handler = new FakeHttpMessageHandler().RespondJson(Canned(SampleJson.ClaudePixels(1456, 971)));
+        ClaudeProvider provider = Make(handler, new ClaudeOptions { ApiKey = "k", Model = "claude-haiku-4-5", Effort = "high", Thinking = "adaptive" });
+
+        await provider.AnalyzeAsync(Image, Req(), CancellationToken.None);
+
+        Assert.True(provider.IsLegacyThinkingModel);
+        using JsonDocument body = JsonDocument.Parse(handler.Bodies.Single());
+        Assert.Equal("claude-haiku-4-5", body.RootElement.GetProperty("model").GetString());
+        Assert.False(body.RootElement.TryGetProperty("thinking", out _));
+        Assert.False(body.RootElement.GetProperty("output_config").TryGetProperty("effort", out _));
+        Assert.Equal("json_schema", body.RootElement.GetProperty("output_config").GetProperty("format").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task Api_key_and_model_are_trimmed()
+    {
+        // Secrets mounted from files usually end with a newline.
+        var handler = new FakeHttpMessageHandler().RespondJson(Canned(SampleJson.ClaudePixels(1456, 971)));
+        ClaudeProvider provider = Make(handler, new ClaudeOptions { ApiKey = "  sk-ant-file-secret\n", Model = " claude-sonnet-5\n" });
+
+        await provider.AnalyzeAsync(Image, Req(), CancellationToken.None);
+
+        Assert.Equal("claude-sonnet-5", provider.Model);
+        Assert.Equal("sk-ant-file-secret", handler.Requests.Single().Headers.GetValues("x-api-key").Single());
+        using JsonDocument body = JsonDocument.Parse(handler.Bodies.Single());
+        Assert.Equal("claude-sonnet-5", body.RootElement.GetProperty("model").GetString());
+    }
+
+    [Fact]
+    public async Task Api_key_with_embedded_newline_fails_clearly_without_sending()
+    {
+        var handler = new FakeHttpMessageHandler();
+        ClaudeProvider provider = Make(handler, new ClaudeOptions { ApiKey = "sk-ant\r\nX-Injected: 1" });
+
+        var ex = await Assert.ThrowsAsync<ProviderNotConfiguredException>(() => provider.AnalyzeAsync(Image, Req(), CancellationToken.None));
+
+        Assert.Empty(handler.Requests);
+        Assert.Contains("not valid in an HTTP header", ex.Message);
+        Assert.DoesNotContain("sk-ant", ex.Message); // the key must not leak into logs
+        Assert.Null(ex.InnerException);
+    }
+
+    [Fact]
     public async Task Thinking_disabled_is_sent_when_configured()
     {
         var handler = new FakeHttpMessageHandler().RespondJson(Canned(SampleJson.ClaudePixels(1456, 971)));
@@ -189,6 +234,26 @@ public class ClaudeProviderTests
         Assert.True(ex2.IsTransient);
         Assert.False(ex3.IsTransient);
         Assert.Contains("invalid x-api-key", ex3.Message);
+
+        // What the client may see: a fixed phrase with the status, never the upstream body.
+        Assert.Equal("upstream returned HTTP 529", ex1.PublicMessage);
+        Assert.Equal("upstream returned HTTP 429", ex2.PublicMessage);
+        Assert.Equal("upstream returned HTTP 401", ex3.PublicMessage);
+        Assert.DoesNotContain("invalid x-api-key", ex3.PublicMessage);
+    }
+
+    [Fact]
+    public async Task Refusal_and_truncation_have_generic_public_messages()
+    {
+        var refusal = new FakeHttpMessageHandler().RespondJson(Canned("", stopReason: "refusal", refusalExplanation: "internal detail"));
+        var truncated = new FakeHttpMessageHandler().RespondJson(Canned("{\"layout_type\":\"br", stopReason: "max_tokens"));
+
+        var ex1 = await Assert.ThrowsAsync<ProviderException>(() => Make(refusal).AnalyzeAsync(Image, Req(), CancellationToken.None));
+        var ex2 = await Assert.ThrowsAsync<ProviderException>(() => Make(truncated).AnalyzeAsync(Image, Req(), CancellationToken.None));
+
+        Assert.Equal("the model declined to analyze this image", ex1.PublicMessage);
+        Assert.DoesNotContain("internal detail", ex1.PublicMessage);
+        Assert.Equal("upstream output was truncated", ex2.PublicMessage);
     }
 
     [Fact]

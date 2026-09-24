@@ -47,7 +47,7 @@ Every setting in `appsettings.json` can be overridden with an environment variab
 |----------|-----------------------|
 | mock (default) | `Analysis__Provider=mock` `Analysis__MockDelayMs=800` |
 | Gemini | `Analysis__Provider=gemini` `Gemini__ApiKey=AIza...` `Gemini__Model=gemini-2.5-flash` `Gemini__ThinkingBudget=0` (optional) |
-| Claude | `Analysis__Provider=claude` `Claude__ApiKey=sk-ant-...` `Claude__Model=claude-sonnet-5` `Claude__MaxTokens=2048` `Claude__Effort=low` |
+| Claude | `Analysis__Provider=claude` `Claude__ApiKey=sk-ant-...` `Claude__Model=claude-sonnet-5` `Claude__MaxTokens=8192` `Claude__Effort=low` |
 
 ```bash
 # Gemini
@@ -71,20 +71,33 @@ inside `IWantFigure.Server/` (the project has a `UserSecretsId`), which keeps ke
 | `Server:AppKey` | *(empty)* | When set, `POST /api/v1/analyze` requires header `X-App-Key: <value>` (else 401). |
 | `Server:RateLimitPerMinute` | 30 | Fixed-window limit per client IP on the analyze endpoint (429 `rate_limited`). |
 | `Server:MaxRequestBodyBytes` | 12582912 | Kestrel body limit (12 MB). |
-| `Server:UseForwardedHeaders` | false | Trust `X-Forwarded-For` when behind a proxy so limits are per real client. |
+| `Server:UseForwardedHeaders` | false | Honour `X-Forwarded-For` / `X-Forwarded-Proto` so rate limits are per real client. Only headers sent by a proxy in `KnownProxies` / `KnownNetworks` are trusted (ASP.NET's defaults trust loopback only). |
+| `Server:KnownProxies` | `[]` | IPs of your reverse proxies / load balancers, e.g. `Server__KnownProxies__0=10.0.0.5`. |
+| `Server:KnownNetworks` | `[]` | CIDR ranges of your proxies, e.g. `Server__KnownNetworks__0=10.0.0.0/8`. |
 | `Analysis:Provider` | mock | `mock` / `gemini` / `claude`. |
 | `Analysis:MockDelayMs` | 800 | Fake latency of the mock provider. |
 | `Analysis:MaxImageLongSide` | 1456 | Downscale bound in pixels (never upscales). |
 | `Analysis:JpegQuality` | 85 | Re-encode quality. |
-| `Analysis:MaxImagePixels` | 50000000 | Reject larger images before decoding. |
+| `Analysis:MaxImagePixels` | 50000000 | Pixel budget for JPEG (can be decoded downscaled); checked from the header before decoding. |
+| `Analysis:MaxImagePixelsNonJpeg` | 16000000 | Pixel budget for PNG / WebP, which are always decoded in full (4 bytes/pixel). |
+| `Analysis:MaxConcurrentDecodes` | 4 | Images decoded/resized at the same time; further requests wait (bounded memory). |
 | `Analysis:ProviderTimeoutSeconds` | 30 | HttpClient timeout per upstream call. |
+| `Analysis:RetryDelayMs` / `Analysis:MaxRetryDelayMs` | 500 / 5000 | Pause before the single retry on 429/5xx; an upstream `Retry-After` is honoured up to the cap. |
 | `Gemini:Model` | gemini-2.5-flash | Any Gemini model that supports `responseSchema`; newer Flash releases can be set here. |
 | `Gemini:ThinkingBudget` | *(null)* | When set, sends `thinkingConfig.thinkingBudget` (0 disables thinking on 2.5 models). Leave unset for models that do not support it. |
 | `Gemini:Temperature` / `Gemini:MaxOutputTokens` | 0.5 / 8192 | generationConfig. |
 | `Claude:Model` | claude-sonnet-5 | Exact model id (no date suffix). |
-| `Claude:MaxTokens` | 2048 | Output cap. On Claude 5 models it covers thinking **and** the JSON; raise it if you raise `Effort`. |
-| `Claude:Effort` | low | `output_config.effort`: low / medium / high / xhigh / max, empty = omit. |
-| `Claude:Thinking` | adaptive | `adaptive` / `disabled` / empty (omit the parameter). |
+| `Claude:MaxTokens` | 8192 | Output cap. On Claude 5 / 4.6+ models it covers thinking **and** the JSON answer (~1k tokens), so keep headroom; raise it if you raise `Effort`. |
+| `Claude:Effort` | low | `output_config.effort`: low / medium / high / xhigh / max, empty = omit. Never sent for `claude-haiku-*`. |
+| `Claude:Thinking` | adaptive | `adaptive` / `disabled` / empty (omit the parameter). Never sent for `claude-haiku-*`. |
+
+Claude model / parameter matrix (what the server sends):
+
+| `Claude:Model` | `thinking` | `output_config.effort` | Notes |
+|---|---|---|---|
+| `claude-sonnet-5` (default), `claude-opus-5`, `claude-opus-4-8/4-7/4-6`, `claude-sonnet-4-6` | `{type: Claude:Thinking}` (`adaptive` default; `disabled` allowed) | `Claude:Effort` (`low` default) | Adaptive thinking is on even when the parameter is omitted; `MaxTokens` must cover thinking + answer. `temperature` is never sent (Claude 5 rejects non-default sampling parameters). |
+| `claude-haiku-4-5` (any `claude-haiku-*`) | omitted | omitted | Haiku uses the older `budget_tokens` thinking shape and rejects `effort`/adaptive thinking; it runs without thinking. |
+| `claude-fable-*` / `claude-mythos-*` | `adaptive` only (set `Claude:Thinking=adaptive` or empty) | `Claude:Effort` | Thinking cannot be disabled on these models (`disabled` returns 400). |
 | `Claude:AnthropicVersion` | 2023-06-01 | `anthropic-version` header. |
 
 ## API
@@ -114,7 +127,9 @@ Headers: `Content-Type: application/json`, optional `X-App-Key`. Body ≤ 12 MB.
 ```
 
 `locale` (`ko` | `ja` | `en`) selects the language of the free-text fields; `hints` and every
-field inside it are optional. The mock provider returns the `layout_type: "unknown"` variant when
+field inside it are optional and are sanitized before they reach the prompt (`claw_count` clamped
+to 0..5, `prize_size_mm` keeps at most three finite values in 1..2000 mm, text fields are cut at
+500 characters). The mock provider returns the `layout_type: "unknown"` variant when
 `hints.notes` contains the word `unknown`.
 
 **200** – the schema object plus metadata. All bounding boxes are `[x1, y1, x2, y2]` normalized to
@@ -157,8 +172,8 @@ Errors always have the shape `{"error": "<code>", "message"?: "...", "provider_m
 | 401 | `unauthorized` | `Server:AppKey` set and `X-App-Key` missing/wrong |
 | 413 | `request_too_large` | Body over 12 MB |
 | 415 | `unsupported_media_type` | `Content-Type` is not `application/json` |
-| 429 | `rate_limited` | More than `Server:RateLimitPerMinute` calls from one IP |
-| 502 | `provider_error` (+ `provider_message`) | Upstream call failed, refused, truncated, or returned unusable JSON after one retry |
+| 429 | `rate_limited` | More than `Server:RateLimitPerMinute` calls from one IP; the response carries `Retry-After: 60` |
+| 502 | `provider_error` (+ `provider_message`) | Upstream call failed, refused, truncated, or returned unusable JSON after one retry. `provider_message` is a short generic phrase (`upstream returned HTTP 401`, `upstream output was truncated`, ...); the full upstream diagnostics are only in the server log |
 | 503 | `provider_not_configured` | Selected provider has no API key |
 
 ### curl example
@@ -182,12 +197,15 @@ cd server
 dotnet test
 ```
 
-73 xUnit tests: normalizer (both coordinate conventions, clamping, enum fallback, target-id repair,
-fence stripping), image pipeline (3000×2000 → 1456×971, EXIF orientation, metadata stripping,
-no upscale, format rejection), Gemini schema conversion, endpoint tests through
-`WebApplicationFactory<Program>` with the mock provider (200 shape, 400/401/503 paths, unknown
-variant), and provider HTTP tests with a fake `HttpMessageHandler` and canned Gemini / Claude
-responses (request body and header assertions + parsing). No network access is needed.
+113 xUnit tests: normalizer (both coordinate conventions incl. the already-normalized fallback,
+clamping, enum fallback, target-id repair, claw_count clamp, fence stripping), image pipeline
+(3000×2000 → 1456×971, EXIF orientation, metadata stripping, no upscale, format rejection,
+per-format pixel budgets, bounded concurrency), prompt-builder hint sanitizing, Gemini schema
+conversion, endpoint tests through `WebApplicationFactory<Program>` with the mock provider
+(200 shape, 400/401/415/503 paths, unknown variant, X-Forwarded-For trust, `Retry-After` on 429,
+generic 502 bodies), provider HTTP tests with a fake `HttpMessageHandler` and canned Gemini /
+Claude responses (request body and header assertions, parsing, trimmed keys, Haiku parameter
+matrix, `Retry-After`), and the service retry/back-off policy. No network access is needed.
 
 ## Docker
 
@@ -210,8 +228,9 @@ health probe at `GET /healthz`.
    long side ≤ 1456 px (never upscale), strip all metadata (EXIF/GPS, XMP, IPTC, ICC),
    re-encode JPEG q85. The resulting size is what the response reports in `image`.
 3. **Call the provider** (`Providers/*Provider.cs`) through a typed `HttpClient` (30 s timeout).
-   Transient failures (429 / 5xx / network) and unparseable answers are retried **once**;
-   auth errors, refusals and truncation fail immediately with 502.
+   Transient failures (429 / 5xx / network) are retried **once** after a short pause
+   (`Analysis:RetryDelayMs`, or the upstream `Retry-After` up to `MaxRetryDelayMs`); unparseable
+   answers are retried once immediately; auth errors, refusals and truncation fail with 502.
    * Gemini: `systemInstruction` + `inline_data` image + `responseSchema` JSON mode. Boxes come
      back as `[ymin, xmin, ymax, xmax]` on 0–1000.
    * Claude: `system` block with `cache_control: ephemeral` (the shared prompt never changes, so
@@ -230,6 +249,12 @@ health probe at `GET /healthz`.
 * Set `Server:AppKey` and send it as `X-App-Key` from the app so random clients cannot spend your
   LLM budget. It is a shared secret, not user authentication - pair it with TLS (terminate HTTPS
   at your proxy / load balancer) and the per-IP rate limit.
+* Behind a proxy, set `Server:UseForwardedHeaders=true` **and** list the proxy in
+  `Server:KnownProxies` / `Server:KnownNetworks`; otherwise `X-Forwarded-For` is ignored and every
+  user shares one rate-limit bucket. Never list networks that untrusted clients can connect from -
+  they could spoof the header and dodge the limit.
+* Error responses never echo upstream bodies; `provider_message` is a fixed short phrase and the
+  details stay in the server log.
 * The server never logs the image, the base64 payload, or API keys. Provider keys are sent in
   request headers (not URLs), and the default `HttpClient` request logging is switched off.
 * Uploaded photos are processed in memory and discarded; nothing is written to disk.
@@ -247,12 +272,14 @@ health probe at `GET /healthz`.
 * Claude: the system prompt block carries `cache_control`, so its tokens are billed at the cache
   read rate from the second request on. Watch `cache_read_input_tokens` in the debug log; if it
   stays 0 the prompt is below the model's minimum cacheable size (1024 tokens on Sonnet 5).
-  `Claude:Effort=low` plus `MaxTokens=2048` keeps thinking short; raise both together if you want
-  deeper strategy reasoning.
+  `Claude:Effort=low` keeps thinking short; `MaxTokens=8192` leaves room for it plus the ~1k-token
+  answer. Raise both together if you want deeper strategy reasoning.
 * Gemini: `Gemini:ThinkingBudget=0` disables thinking on 2.5 models (cheapest and fastest);
   leave it unset for models that do not support the field.
 * The one-retry policy can double the cost of a failed request; refusals and truncation are
   not retried.
+* Player hints are clamped (three prize dimensions, 500 characters of text) so a malicious or
+  buggy client cannot inflate the billed prompt.
 
 ## Project layout
 

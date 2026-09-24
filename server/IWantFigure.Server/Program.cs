@@ -1,3 +1,4 @@
+using System.Net;
 using System.Threading.RateLimiting;
 using IWantFigure.Server.Analysis;
 using IWantFigure.Server.Configuration;
@@ -48,6 +49,8 @@ builder.Services.AddRateLimiter(options =>
             }));
     options.OnRejected = async (context, token) =>
     {
+        // The window is one minute, so tell well-behaved clients when to come back.
+        context.HttpContext.Response.Headers.RetryAfter = "60";
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsync("{\"error\":\"rate_limited\"}", token);
     };
@@ -65,10 +68,34 @@ WebApplication app = builder.Build();
 if (serverOptions.UseForwardedHeaders)
 {
     // Behind nginx / a cloud load balancer: trust X-Forwarded-For so rate limiting is per real client.
-    app.UseForwardedHeaders(new ForwardedHeadersOptions
+    // ASP.NET's defaults only trust loopback (KnownProxies = [::1], KnownNetworks = 127.0.0.0/8), so the
+    // header would be silently ignored for a proxy on another host and every user would share one
+    // rate-limit bucket. The operator lists the proxies explicitly; the loopback defaults are kept.
+    var forwarded = new ForwardedHeadersOptions
     {
         ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-    });
+    };
+    foreach (string entry in serverOptions.KnownProxies)
+    {
+        if (!IPAddress.TryParse(entry.Trim(), out IPAddress? proxy))
+        {
+            throw new InvalidOperationException($"Server:KnownProxies entry '{entry}' is not a valid IP address");
+        }
+        forwarded.KnownProxies.Add(proxy);
+    }
+    foreach (string entry in serverOptions.KnownNetworks)
+    {
+        if (!System.Net.IPNetwork.TryParse(entry.Trim(), out System.Net.IPNetwork network))
+        {
+            throw new InvalidOperationException($"Server:KnownNetworks entry '{entry}' is not a valid CIDR network (e.g. 10.0.0.0/8)");
+        }
+        forwarded.KnownIPNetworks.Add(network);
+    }
+    if (serverOptions.KnownProxies.Length == 0 && serverOptions.KnownNetworks.Length == 0)
+    {
+        app.Logger.LogWarning("Server:UseForwardedHeaders is on but no Server:KnownProxies / Server:KnownNetworks are configured; X-Forwarded-For will only be trusted from loopback");
+    }
+    app.UseForwardedHeaders(forwarded);
 }
 
 app.UseRateLimiter();

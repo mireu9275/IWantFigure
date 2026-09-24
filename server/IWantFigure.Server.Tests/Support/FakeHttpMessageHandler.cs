@@ -16,6 +16,9 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
 
     public List<string> Bodies { get; } = new();
 
+    /// <summary>Hooks applied to every scripted response before it is returned (e.g. to add headers).</summary>
+    public List<Action<HttpResponseMessage>> Responses { get; } = new();
+
     public FakeHttpMessageHandler Respond(HttpStatusCode status, string body)
     {
         _responders.Enqueue(_ => new HttpResponseMessage(status)
@@ -40,6 +43,11 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
         {
             throw new InvalidOperationException("no scripted response");
         }
-        return _last(request);
+        HttpResponseMessage response = _last(request);
+        foreach (Action<HttpResponseMessage> decorate in Responses)
+        {
+            decorate(response);
+        }
+        return response;
     }
 }

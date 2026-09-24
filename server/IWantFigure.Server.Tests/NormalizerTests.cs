@@ -55,6 +55,18 @@ public class NormalizerTests
     }
 
     [Fact]
+    public void Gemini_values_already_in_0_1_keep_geminis_axis_order()
+    {
+        // The model skipped the x1000 scale but still answered in its native [ymin, xmin, ymax, xmax] order.
+        JsonObject root = JsonNode.Parse(SampleJson.Normalized)!.AsObject();
+        root["objects"]![0]!["bbox"] = new JsonArray(0.42, 0.36, 0.74, 0.64);
+
+        AnalysisDocument doc = Run(root.ToJsonString(), CoordinateConvention.NormalizedThousandths);
+
+        Assert.Equal(new[] { 0.36, 0.42, 0.64, 0.74 }, Obj(doc, "box1").Bbox);
+    }
+
+    [Fact]
     public void Claude_pixels_are_divided_by_sent_image_size()
     {
         const int w = 1456, h = 971;
@@ -106,6 +118,22 @@ public class NormalizerTests
 
         Assert.Equal(0.0, doc.Confidence);
         Assert.Equal(0, doc.Machine.ClawCount);
+    }
+
+    [Theory]
+    [InlineData(1e12, 5)]      // would saturate to int.MaxValue without clamping on the double
+    [InlineData(3.4, 3)]
+    [InlineData(2.6, 3)]
+    [InlineData(99, 5)]
+    [InlineData(-7, 0)]
+    public void Claw_count_is_clamped_to_0_5(double input, int expected)
+    {
+        JsonObject root = JsonNode.Parse(SampleJson.Normalized)!.AsObject();
+        root["machine"]!["claw_count"] = input;
+
+        AnalysisDocument doc = Run(root.ToJsonString(), CoordinateConvention.NormalizedUnit);
+
+        Assert.Equal(expected, doc.Machine.ClawCount);
     }
 
     [Fact]

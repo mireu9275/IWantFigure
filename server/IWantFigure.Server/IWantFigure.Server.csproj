@@ -9,6 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Lets the test project exercise internal helpers (schema converters, prompt bounds, ...). -->
+    <InternalsVisibleTo Include="IWantFigure.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Image decode / EXIF auto-orient / resize / JPEG re-encode. Pinned to the 3.x line. -->
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>

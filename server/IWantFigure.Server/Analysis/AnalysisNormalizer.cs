@@ -18,6 +18,9 @@ namespace IWantFigure.Server.Analysis;
 /// </summary>
 public sealed class AnalysisNormalizer
 {
+    /// <summary>Real machines have 2 or 3 claws; anything above this is a hallucination.</summary>
+    internal const int MaxClawCount = 5;
+
     private readonly AnalysisSchema _schema;
 
     public AnalysisNormalizer(AnalysisSchema schema)
@@ -49,7 +52,8 @@ public sealed class AnalysisNormalizer
         JsonObject? machine = root["machine"] as JsonObject;
         doc.Machine = new MachineInfo
         {
-            ClawCount = Math.Max(0, (int)Math.Round(NumberOrDefault(machine?["claw_count"], 0))),
+            // Clamp on the double BEFORE casting: (int)Math.Round(1e12) would saturate to int.MaxValue.
+            ClawCount = (int)Math.Clamp(Math.Round(NumberOrDefault(machine?["claw_count"], 0)), 0, MaxClawCount),
             ArmPowerEstimate = EnumOrDefault(machine?["arm_power_estimate"], _schema.ArmPower, "unknown"),
             AssistLamp = EnumOrDefault(machine?["assist_lamp"], _schema.AssistLamps, "unknown"),
             ExitSide = EnumOrDefault(machine?["exit_side"], _schema.ExitSides, "unknown"),
@@ -276,23 +280,30 @@ public sealed class AnalysisNormalizer
             v[i] = d;
         }
 
-        // Safety net: if a provider ignored the requested convention and already returned
-        // 0..1 values, do not divide them again into nothing.
+        // Safety net: if a provider ignored the requested scale and already returned 0..1 values,
+        // skip the division - but keep the provider's AXIS ORDER (Gemini stays [ymin, xmin, ymax, xmax]).
         bool looksNormalized = v.All(x => x is >= 0.0 and <= 1.0) && v.Any(x => x > 0.0);
 
         double x1, y1, x2, y2;
         switch (convention)
         {
-            case CoordinateConvention.NormalizedThousandths when !looksNormalized:
+            case CoordinateConvention.NormalizedThousandths:
+            {
                 // Gemini: [ymin, xmin, ymax, xmax] on 0..1000
-                y1 = v[0] / 1000.0; x1 = v[1] / 1000.0; y2 = v[2] / 1000.0; x2 = v[3] / 1000.0;
+                double scale = looksNormalized ? 1.0 : 1.0 / 1000.0;
+                y1 = v[0] * scale; x1 = v[1] * scale; y2 = v[2] * scale; x2 = v[3] * scale;
                 break;
-            case CoordinateConvention.AbsolutePixels when !looksNormalized:
+            }
+            case CoordinateConvention.AbsolutePixels:
+            {
                 // Claude: [x1, y1, x2, y2] in pixels of the sent image
-                x1 = v[0] / imageWidth; y1 = v[1] / imageHeight; x2 = v[2] / imageWidth; y2 = v[3] / imageHeight;
+                double sx = looksNormalized ? 1.0 : 1.0 / imageWidth;
+                double sy = looksNormalized ? 1.0 : 1.0 / imageHeight;
+                x1 = v[0] * sx; y1 = v[1] * sy; x2 = v[2] * sx; y2 = v[3] * sy;
                 break;
+            }
             default:
-                // NormalizedUnit (mock / already normalized): [x1, y1, x2, y2] in 0..1
+                // NormalizedUnit (mock): [x1, y1, x2, y2] in 0..1
                 x1 = v[0]; y1 = v[1]; x2 = v[2]; y2 = v[3];
                 break;
         }

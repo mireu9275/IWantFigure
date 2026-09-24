@@ -12,6 +12,13 @@ namespace IWantFigure.Server.Providers;
 /// </summary>
 public static class PromptBuilder
 {
+    /// <summary>Hint bounds. Player input is untrusted and every character is billed, so it is clamped hard.</summary>
+    internal const int MaxClawCount = 5;
+    internal const int MaxPrizeDimensions = 3;
+    internal const double MinPrizeMm = 1;
+    internal const double MaxPrizeMm = 2000;
+    internal const int MaxHintTextLength = 500;
+
     /// <summary>Maps the app's locale code to the language the free-text fields should be written in.</summary>
     public static string LanguageName(string? locale) => (locale ?? "").Trim().ToLowerInvariant() switch
     {
@@ -36,10 +43,12 @@ public static class PromptBuilder
           .AppendLine(". Keep every enum field exactly as defined in the schema (English tokens).");
 
         AnalyzeHints? h = request.Hints;
+        int? clawCount = h?.ClawCount is int c ? Math.Clamp(c, 0, MaxClawCount) : null;
+        double[] prizeSize = SanitizePrizeSize(h?.PrizeSizeMm);
         bool anyHint = h is not null && (
             !string.IsNullOrWhiteSpace(h.MachineFamily) ||
-            h.ClawCount is not null ||
-            (h.PrizeSizeMm is { Length: > 0 }) ||
+            clawCount is not null ||
+            prizeSize.Length > 0 ||
             !string.IsNullOrWhiteSpace(h.Notes));
 
         if (anyHint && h is not null)
@@ -50,14 +59,14 @@ public static class PromptBuilder
             {
                 sb.Append("- machine_family: ").AppendLine(Clean(h.MachineFamily));
             }
-            if (h.ClawCount is not null)
+            if (clawCount is int claws)
             {
-                sb.Append("- claw_count: ").AppendLine(h.ClawCount.Value.ToString(CultureInfo.InvariantCulture));
+                sb.Append("- claw_count: ").AppendLine(claws.ToString(CultureInfo.InvariantCulture));
             }
-            if (h.PrizeSizeMm is { Length: > 0 })
+            if (prizeSize.Length > 0)
             {
                 sb.Append("- prize_size_mm [w, d, h]: [")
-                  .Append(string.Join(", ", h.PrizeSizeMm.Select(v => v.ToString("0.#", CultureInfo.InvariantCulture))))
+                  .Append(string.Join(", ", prizeSize.Select(v => v.ToString("0.#", CultureInfo.InvariantCulture))))
                   .AppendLine("]");
             }
             if (!string.IsNullOrWhiteSpace(h.Notes))
@@ -69,10 +78,20 @@ public static class PromptBuilder
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// Keeps at most three finite values in a plausible range (1..2000 mm). Anything else - a
+    /// 200k-element array, NaN, negative numbers - is dropped instead of being pasted into the prompt.
+    /// </summary>
+    internal static double[] SanitizePrizeSize(double[]? values) =>
+        (values ?? Array.Empty<double>())
+            .Where(v => double.IsFinite(v) && v >= MinPrizeMm && v <= MaxPrizeMm)
+            .Take(MaxPrizeDimensions)
+            .ToArray();
+
     /// <summary>Single line, bounded length - keeps prompt size (and cost) predictable.</summary>
     private static string Clean(string s)
     {
         string oneLine = s.Replace('\r', ' ').Replace('\n', ' ').Trim();
-        return oneLine.Length <= 500 ? oneLine : oneLine[..500] + "...";
+        return oneLine.Length <= MaxHintTextLength ? oneLine : oneLine[..MaxHintTextLength] + "...";
     }
 }

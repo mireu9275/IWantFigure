@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using IWantFigure.Server.Configuration;
 using IWantFigure.Server.Contracts;
 using IWantFigure.Server.Imaging;
 using IWantFigure.Server.Models;
 using IWantFigure.Server.Providers;
+using Microsoft.Extensions.Options;
 
 namespace IWantFigure.Server.Analysis;
 
@@ -22,13 +24,17 @@ public sealed class AnalysisService
     private readonly IAnalysisProvider _provider;
     private readonly AnalysisNormalizer _normalizer;
     private readonly ILogger<AnalysisService> _logger;
+    private readonly TimeSpan _retryDelay;
+    private readonly TimeSpan _maxRetryDelay;
 
-    public AnalysisService(ImagePipeline pipeline, IAnalysisProvider provider, AnalysisNormalizer normalizer, ILogger<AnalysisService> logger)
+    public AnalysisService(ImagePipeline pipeline, IAnalysisProvider provider, AnalysisNormalizer normalizer, IOptions<AnalysisOptions> options, ILogger<AnalysisService> logger)
     {
         _pipeline = pipeline;
         _provider = provider;
         _normalizer = normalizer;
         _logger = logger;
+        _retryDelay = TimeSpan.FromMilliseconds(Math.Max(0, options.Value.RetryDelayMs));
+        _maxRetryDelay = TimeSpan.FromMilliseconds(Math.Max(0, options.Value.MaxRetryDelayMs));
     }
 
     public async Task<AnalysisResponse> AnalyzeAsync(AnalyzeRequest request, CancellationToken ct)
@@ -37,7 +43,7 @@ public sealed class AnalysisService
         string analysisId = Guid.NewGuid().ToString();
 
         byte[] sourceBytes = DecodeImage(request);
-        PreparedImage image = _pipeline.Prepare(sourceBytes);
+        PreparedImage image = await _pipeline.PrepareAsync(sourceBytes, ct).ConfigureAwait(false);
         _logger.LogDebug("analysis {AnalysisId}: image prepared {Width}x{Height} ({Bytes} bytes) in {ElapsedMs} ms",
             analysisId, image.Width, image.Height, image.Bytes.Length, stopwatch.ElapsedMilliseconds);
 
@@ -60,7 +66,17 @@ public sealed class AnalysisService
             }
             catch (ProviderException ex) when (ex.IsTransient && attempt < maxAttempts)
             {
-                _logger.LogWarning(ex, "analysis {AnalysisId}: provider {Provider} transient failure on attempt {Attempt}, retrying", analysisId, _provider.Name, attempt);
+                // Back off briefly (429/529 mean "slow down"); honour upstream Retry-After but cap it.
+                TimeSpan delay = ex.RetryAfter is TimeSpan retryAfter && retryAfter > _retryDelay ? retryAfter : _retryDelay;
+                if (delay > _maxRetryDelay)
+                {
+                    delay = _maxRetryDelay;
+                }
+                _logger.LogWarning(ex, "analysis {AnalysisId}: provider {Provider} transient failure on attempt {Attempt}, retrying in {DelayMs} ms", analysisId, _provider.Name, attempt, (int)delay.TotalMilliseconds);
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay, ct).ConfigureAwait(false);
+                }
             }
             catch (AnalysisFormatException ex) when (attempt < maxAttempts)
             {

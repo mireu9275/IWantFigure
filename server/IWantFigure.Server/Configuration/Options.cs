@@ -26,8 +26,17 @@ public sealed class ServerOptions
     /// <summary>
     /// Set to true when running behind a reverse proxy / load balancer so the
     /// rate limiter sees the real client IP from X-Forwarded-For.
+    /// The header is only honoured when it comes from a proxy listed in
+    /// <see cref="KnownProxies"/> / <see cref="KnownNetworks"/> (ASP.NET's defaults
+    /// trust loopback only, which is useless when nginx / the LB runs on another host).
     /// </summary>
     public bool UseForwardedHeaders { get; set; }
+
+    /// <summary>IP addresses of the proxies allowed to set X-Forwarded-For, e.g. ["10.0.0.5"].</summary>
+    public string[] KnownProxies { get; set; } = Array.Empty<string>();
+
+    /// <summary>CIDR networks of the proxies allowed to set X-Forwarded-For, e.g. ["10.0.0.0/8", "fd00::/8"].</summary>
+    public string[] KnownNetworks { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Pipeline settings ("Analysis" section).</summary>
@@ -50,11 +59,29 @@ public sealed class AnalysisOptions
     /// <summary>JPEG quality used when re-encoding the image for the model.</summary>
     public int JpegQuality { get; set; } = 85;
 
-    /// <summary>Reject images with more pixels than this before decoding (decompression-bomb guard).</summary>
+    /// <summary>
+    /// Reject JPEGs with more pixels than this before decoding (decompression-bomb guard).
+    /// JPEG is the only format ImageSharp can decode at reduced resolution, so it gets the larger budget.
+    /// </summary>
     public long MaxImagePixels { get; set; } = 50_000_000;
+
+    /// <summary>
+    /// Pixel budget for PNG / WebP, which are always decoded at full size (4 bytes per pixel in memory).
+    /// 16 MP = 64 MB peak per image.
+    /// </summary>
+    public long MaxImagePixelsNonJpeg { get; set; } = 16_000_000;
+
+    /// <summary>How many images may be decoded/resized at the same time; extra requests wait (bounded memory).</summary>
+    public int MaxConcurrentDecodes { get; set; } = 4;
 
     /// <summary>HttpClient timeout for one call to the LLM provider.</summary>
     public int ProviderTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Pause before the single retry after a transient upstream failure (429 / 5xx / network).</summary>
+    public int RetryDelayMs { get; set; } = 500;
+
+    /// <summary>Upper bound for an upstream Retry-After value we are willing to honour - the phone is waiting.</summary>
+    public int MaxRetryDelayMs { get; set; } = 5000;
 }
 
 /// <summary>Google Gemini settings ("Gemini" section).</summary>
@@ -95,10 +122,11 @@ public sealed class ClaudeOptions
     public string Model { get; set; } = "claude-sonnet-5";
 
     /// <summary>
-    /// Hard cap on output tokens. NOTE: on Claude Sonnet 5 / Opus 5 this cap covers
-    /// thinking + the JSON answer, so raise it if you raise <see cref="Effort"/>.
+    /// Hard cap on output tokens. On Claude Sonnet 5 / Opus 5 this cap covers
+    /// thinking + the JSON answer (the answer alone is ~1k tokens), so 8192 leaves room for
+    /// adaptive thinking at low/medium effort. Raise it further if you raise <see cref="Effort"/>.
     /// </summary>
-    public int MaxTokens { get; set; } = 2048;
+    public int MaxTokens { get; set; } = 8192;
 
     /// <summary>
     /// output_config.effort: low | medium | high | xhigh | max. Empty = do not send (API default "high").
@@ -108,7 +136,8 @@ public sealed class ClaudeOptions
 
     /// <summary>
     /// "adaptive" (default, the only "on" mode for Claude 4.6+ / 5 models), "disabled",
-    /// or empty to omit the parameter entirely (needed for models that use budget_tokens, e.g. Haiku 4.5).
+    /// or empty to omit the parameter entirely. Ignored (never sent) together with Effort for
+    /// "claude-haiku-*" models, which reject both parameters.
     /// </summary>
     public string? Thinking { get; set; } = "adaptive";
 

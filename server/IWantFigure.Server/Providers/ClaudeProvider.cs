@@ -39,6 +39,8 @@ public sealed class ClaudeProvider : IAnalysisProvider
     private readonly ClaudeOptions _options;
     private readonly ILogger<ClaudeProvider> _logger;
     private readonly JsonObject _outputSchema;
+    private readonly string? _apiKey;
+    private readonly string _model;
 
     public ClaudeProvider(HttpClient http, IOptions<ClaudeOptions> options, AnalysisSchema schema, ILogger<ClaudeProvider> logger)
     {
@@ -46,15 +48,24 @@ public sealed class ClaudeProvider : IAnalysisProvider
         _options = options.Value;
         _logger = logger;
         _outputSchema = ClaudeSchemaConverter.Convert(schema.Root);
+        // Secrets mounted from files often end with a newline; trim so the header is well-formed.
+        _apiKey = _options.ApiKey?.Trim();
+        _model = string.IsNullOrWhiteSpace(_options.Model) ? new ClaudeOptions().Model : _options.Model.Trim();
     }
 
     public string Name => "claude";
 
-    public string Model => _options.Model;
+    public string Model => _model;
+
+    /// <summary>
+    /// Haiku-generation models (claude-haiku-*) use the older thinking shape (budget_tokens) and
+    /// reject both output_config.effort and thinking:{type:"adaptive"} with a 400, so neither is sent.
+    /// </summary>
+    internal bool IsLegacyThinkingModel => _model.StartsWith("claude-haiku", StringComparison.OrdinalIgnoreCase);
 
     public async Task<ProviderResult> AnalyzeAsync(PreparedImage image, AnalyzeRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        if (string.IsNullOrWhiteSpace(_apiKey))
         {
             throw new ProviderNotConfiguredException(Name);
         }
@@ -66,8 +77,17 @@ public sealed class ClaudeProvider : IAnalysisProvider
         {
             Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
         };
-        httpRequest.Headers.TryAddWithoutValidation("x-api-key", _options.ApiKey);
-        httpRequest.Headers.TryAddWithoutValidation("anthropic-version", _options.AnthropicVersion);
+        try
+        {
+            // Validating Add: a key with a stray CR/LF fails here, loudly, instead of producing a malformed request.
+            httpRequest.Headers.Add("x-api-key", _apiKey);
+            httpRequest.Headers.Add("anthropic-version", _options.AnthropicVersion.Trim());
+        }
+        catch (FormatException)
+        {
+            // Deliberately no inner exception: its message would contain the key.
+            throw new ProviderNotConfiguredException(Name, "Claude:ApiKey / Claude:AnthropicVersion contains characters that are not valid in an HTTP header");
+        }
 
         string responseText = await ProviderHttp.SendAsync(_http, httpRequest, Name, ct).ConfigureAwait(false);
         return ParseResponse(responseText);
@@ -83,14 +103,14 @@ public sealed class ClaudeProvider : IAnalysisProvider
                 ["schema"] = _outputSchema.DeepClone(),
             },
         };
-        if (!string.IsNullOrWhiteSpace(_options.Effort))
+        if (!IsLegacyThinkingModel && !string.IsNullOrWhiteSpace(_options.Effort))
         {
             outputConfig["effort"] = _options.Effort.Trim().ToLowerInvariant();
         }
 
         var body = new JsonObject
         {
-            ["model"] = _options.Model,
+            ["model"] = _model,
             ["max_tokens"] = _options.MaxTokens,
             ["system"] = new JsonArray(new JsonObject
             {
@@ -122,11 +142,11 @@ public sealed class ClaudeProvider : IAnalysisProvider
         };
 
         string thinking = (_options.Thinking ?? "").Trim().ToLowerInvariant();
-        if (thinking is "adaptive" or "disabled")
+        if (!IsLegacyThinkingModel && thinking is "adaptive" or "disabled")
         {
             body["thinking"] = new JsonObject { ["type"] = thinking };
         }
-        // else: omit the parameter (older models such as Haiku 4.5 use a different thinking shape).
+        // else: omit the parameter (empty setting, or a claude-haiku-* model that would 400 on it).
 
         return body;
     }
@@ -149,10 +169,10 @@ public sealed class ClaudeProvider : IAnalysisProvider
                                      sd.TryGetProperty("explanation", out JsonElement ex) && ex.ValueKind == JsonValueKind.String
                     ? ex.GetString() ?? ""
                     : "";
-                throw new ProviderException("claude: the model refused to analyze this image" + (explanation.Length > 0 ? ": " + explanation : ""), isTransient: false);
+                throw new ProviderException("claude: the model refused to analyze this image" + (explanation.Length > 0 ? ": " + explanation : ""), isTransient: false, publicMessage: "the model declined to analyze this image");
 
             case "max_tokens":
-                throw new ProviderException($"claude: output truncated at max_tokens={_options.MaxTokens}; raise Claude:MaxTokens or lower Claude:Effort", isTransient: false);
+                throw new ProviderException($"claude: output truncated at max_tokens={_options.MaxTokens}; raise Claude:MaxTokens or lower Claude:Effort", isTransient: false, publicMessage: "upstream output was truncated");
         }
 
         string? text = null;
@@ -171,7 +191,7 @@ public sealed class ClaudeProvider : IAnalysisProvider
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            throw new ProviderException($"claude: response has no text block (stop_reason={stopReason})", isTransient: false);
+            throw new ProviderException($"claude: response has no text block (stop_reason={stopReason})", isTransient: false, publicMessage: "upstream returned no answer");
         }
 
         ProviderUsage? usage = null;

@@ -42,23 +42,44 @@ public interface IAnalysisProvider
     Task<ProviderResult> AnalyzeAsync(PreparedImage image, AnalyzeRequest request, CancellationToken ct);
 }
 
-/// <summary>The upstream API call failed (HTTP error, network, refusal, truncated output). Mapped to HTTP 502.</summary>
+/// <summary>
+/// The upstream API call failed (HTTP error, network, refusal, truncated output). Mapped to HTTP 502.
+/// <see cref="Exception.Message"/> carries the full diagnostics for the server log;
+/// <see cref="PublicMessage"/> is the short, generic text that goes to the client.
+/// </summary>
 public class ProviderException : Exception
 {
-    public ProviderException(string message, bool isTransient, Exception? inner = null) : base(message, inner)
+    public const string DefaultPublicMessage = "upstream provider error";
+
+    public ProviderException(string message, bool isTransient, string? publicMessage = null, Exception? inner = null, TimeSpan? retryAfter = null)
+        : base(message, inner)
     {
         IsTransient = isTransient;
+        PublicMessage = string.IsNullOrWhiteSpace(publicMessage) ? DefaultPublicMessage : publicMessage;
+        RetryAfter = retryAfter;
     }
 
     /// <summary>True for 429 / 5xx / connection errors - worth one retry. False for 4xx, refusals, truncation.</summary>
     public bool IsTransient { get; }
+
+    /// <summary>Safe to return to the client: never contains upstream bodies, keys or the image.</summary>
+    public string PublicMessage { get; }
+
+    /// <summary>Upstream Retry-After (429 / 503 / 529), when the provider sent one.</summary>
+    public TimeSpan? RetryAfter { get; }
 }
 
-/// <summary>The selected provider has no API key. Mapped to HTTP 503 provider_not_configured.</summary>
+/// <summary>The selected provider is not usable because of its configuration (no API key, malformed key). Mapped to HTTP 503 provider_not_configured.</summary>
 public sealed class ProviderNotConfiguredException : Exception
 {
     public ProviderNotConfiguredException(string provider)
         : base($"provider '{provider}' is selected but its API key is not configured")
+    {
+        Provider = provider;
+    }
+
+    public ProviderNotConfiguredException(string provider, string detail)
+        : base($"provider '{provider}' is misconfigured: {detail}")
     {
         Provider = provider;
     }

@@ -30,12 +30,12 @@ internal static class ProviderHttp
         }
         catch (HttpRequestException ex)
         {
-            throw new ProviderException($"{providerName}: network error: {ex.Message}", isTransient: true, ex);
+            throw new ProviderException($"{providerName}: network error: {ex.Message}", isTransient: true, publicMessage: "upstream request failed", inner: ex);
         }
         catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
         {
             // HttpClient.Timeout elapsed (the caller did not cancel). A second 30 s wait rarely helps a phone user.
-            throw new ProviderException($"{providerName}: request timed out after {http.Timeout.TotalSeconds:0} s", isTransient: false, ex);
+            throw new ProviderException($"{providerName}: request timed out after {http.Timeout.TotalSeconds:0} s", isTransient: false, publicMessage: "upstream request timed out", inner: ex);
         }
 
         using (response)
@@ -46,11 +46,26 @@ internal static class ProviderHttp
                 return body;
             }
 
+            int status = (int)response.StatusCode;
             string detail = ExtractErrorMessage(body);
             throw new ProviderException(
-                $"{providerName}: HTTP {(int)response.StatusCode} {response.ReasonPhrase}: {detail}",
-                IsTransientStatus(response.StatusCode));
+                $"{providerName}: HTTP {status} {response.ReasonPhrase}: {detail}",
+                IsTransientStatus(response.StatusCode),
+                publicMessage: $"upstream returned HTTP {status}",
+                retryAfter: ReadRetryAfter(response));
         }
+    }
+
+    /// <summary>Retry-After as a delay (delta-seconds or HTTP-date), or null when absent / in the past.</summary>
+    internal static TimeSpan? ReadRetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        if (header is null)
+        {
+            return null;
+        }
+        TimeSpan? delay = header.Delta ?? (header.Date is DateTimeOffset date ? date - DateTimeOffset.UtcNow : null);
+        return delay is { } d && d > TimeSpan.Zero ? d : null;
     }
 
     /// <summary>Both Google and Anthropic wrap errors as {"error": {"message": "..."}}. Fall back to a short body preview.</summary>
@@ -92,7 +107,7 @@ internal static class ProviderHttp
         }
         catch (JsonException ex)
         {
-            throw new ProviderException($"{providerName}: response is not JSON: {ex.Message}", isTransient: true, ex);
+            throw new ProviderException($"{providerName}: response is not JSON: {ex.Message}", isTransient: true, publicMessage: "upstream response was not valid JSON", inner: ex);
         }
     }
 

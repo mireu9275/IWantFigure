@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using IWantFigure.Server.Providers;
 using IWantFigure.Server.Tests.Support;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace IWantFigure.Server.Tests;
 
@@ -253,5 +257,131 @@ public class ProviderNotConfiguredTests
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         using JsonDocument json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("provider_not_configured", json.RootElement.GetProperty("error").GetString());
+    }
+}
+
+/// <summary>
+/// X-Forwarded-For handling: the header must only be honoured when it comes from a configured
+/// proxy. Every request in these tests arrives from 10.0.0.5 (the "proxy") with limit 1/min.
+/// </summary>
+public class ForwardedHeadersTests
+{
+    private const string ProxyIp = "10.0.0.5";
+
+    private static ServerFactory Factory(IDictionary<string, string?> extra)
+    {
+        var settings = new Dictionary<string, string?>
+        {
+            ["Server:UseForwardedHeaders"] = "true",
+            ["Server:RateLimitPerMinute"] = "1",
+        };
+        foreach (KeyValuePair<string, string?> kv in extra)
+        {
+            settings[kv.Key] = kv.Value;
+        }
+        return ServerFactory.WithSettings(settings, services =>
+            services.AddSingleton<IStartupFilter>(new FakeRemoteIpStartupFilter(ProxyIp)));
+    }
+
+    private static Task<HttpResponseMessage> Post(HttpClient client, string forwardedFor)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/analyze")
+        {
+            Content = JsonContent.Create(new { image_base64 = Convert.ToBase64String(TestImages.Jpeg(64, 48)), mime = "image/jpeg" }),
+        };
+        request.Headers.Add("X-Forwarded-For", forwardedFor);
+        return client.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task Known_proxy_by_ip_makes_the_rate_limit_per_forwarded_client()
+    {
+        using ServerFactory factory = Factory(new Dictionary<string, string?> { ["Server:KnownProxies:0"] = ProxyIp });
+        HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage first = await Post(client, "203.0.113.1");
+        HttpResponseMessage second = await Post(client, "203.0.113.2");
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode); // different client -> own bucket
+    }
+
+    [Fact]
+    public async Task Known_network_cidr_also_trusts_the_proxy()
+    {
+        using ServerFactory factory = Factory(new Dictionary<string, string?> { ["Server:KnownNetworks:0"] = "10.0.0.0/8" });
+        HttpClient client = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.OK, (await Post(client, "203.0.113.1")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Post(client, "203.0.113.2")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Same_forwarded_client_is_still_limited()
+    {
+        using ServerFactory factory = Factory(new Dictionary<string, string?> { ["Server:KnownProxies:0"] = ProxyIp });
+        HttpClient client = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.OK, (await Post(client, "203.0.113.1")).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await Post(client, "203.0.113.1")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Without_a_known_proxy_the_header_is_ignored_and_everyone_shares_one_bucket()
+    {
+        using ServerFactory factory = Factory(new Dictionary<string, string?>());
+        HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage first = await Post(client, "203.0.113.1");
+        HttpResponseMessage second = await Post(client, "203.0.113.2");
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);
+        Assert.Equal("60", second.Headers.RetryAfter?.ToString());
+        using JsonDocument json = JsonDocument.Parse(await second.Content.ReadAsStringAsync());
+        Assert.Equal("rate_limited", json.RootElement.GetProperty("error").GetString());
+    }
+}
+
+/// <summary>What the client sees when the provider fails: a generic phrase, never upstream diagnostics.</summary>
+public class ProviderErrorResponseTests
+{
+    private static ServerFactory Factory(Exception exception) =>
+        ServerFactory.WithSettings(new Dictionary<string, string?>(), services =>
+        {
+            services.RemoveAll<IAnalysisProvider>();
+            services.AddSingleton<IAnalysisProvider>(new ThrowingProvider(exception));
+        });
+
+    private static object Body() => new { image_base64 = Convert.ToBase64String(TestImages.Jpeg(64, 48)), mime = "image/jpeg" };
+
+    [Fact]
+    public async Task Provider_error_returns_502_with_the_generic_public_message_only()
+    {
+        const string secretBody = "{\"error\":{\"message\":\"invalid x-api-key sk-ant-SECRET\"}}";
+        using ServerFactory factory = Factory(new ProviderException(
+            "claude: HTTP 401 Unauthorized: " + secretBody, isTransient: false, publicMessage: "upstream returned HTTP 401"));
+
+        HttpResponseMessage response = await factory.CreateClient().PostAsJsonAsync("/api/v1/analyze", Body());
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        string text = await response.Content.ReadAsStringAsync();
+        using JsonDocument json = JsonDocument.Parse(text);
+        Assert.Equal("provider_error", json.RootElement.GetProperty("error").GetString());
+        Assert.Equal("upstream returned HTTP 401", json.RootElement.GetProperty("provider_message").GetString());
+        Assert.DoesNotContain("SECRET", text);
+        Assert.DoesNotContain("Unauthorized", text);
+    }
+
+    [Fact]
+    public async Task Provider_error_without_public_message_falls_back_to_a_fixed_phrase()
+    {
+        using ServerFactory factory = Factory(new ProviderException("gemini: something with a body <html>...</html>", isTransient: false));
+
+        HttpResponseMessage response = await factory.CreateClient().PostAsJsonAsync("/api/v1/analyze", Body());
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        using JsonDocument json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(ProviderException.DefaultPublicMessage, json.RootElement.GetProperty("provider_message").GetString());
     }
 }

@@ -80,13 +80,15 @@ public static class AnalyzeEndpoints
         }
         catch (ProviderException ex)
         {
-            logger.LogError(ex, "provider call failed");
-            return Results.Json(new ErrorResponse("provider_error", providerMessage: ex.Message), ServerJson.Response, statusCode: StatusCodes.Status502BadGateway);
+            // Full upstream diagnostics (status text, error body preview) go to the log only;
+            // the client gets the short generic PublicMessage.
+            logger.LogError(ex, "provider call failed: {Detail}", ex.Message);
+            return Results.Json(new ErrorResponse("provider_error", providerMessage: ex.PublicMessage), ServerJson.Response, statusCode: StatusCodes.Status502BadGateway);
         }
         catch (AnalysisFormatException ex)
         {
-            logger.LogError(ex, "provider answer could not be normalized");
-            return Results.Json(new ErrorResponse("provider_error", providerMessage: ex.Message), ServerJson.Response, statusCode: StatusCodes.Status502BadGateway);
+            logger.LogError(ex, "provider answer could not be normalized: {Detail}", ex.Message);
+            return Results.Json(new ErrorResponse("provider_error", providerMessage: "upstream response did not match the expected format"), ServerJson.Response, statusCode: StatusCodes.Status502BadGateway);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
