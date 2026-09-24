@@ -23,6 +23,8 @@ class IWantFigureApp extends StatelessWidget {
     this.faceDetector,
     this.serviceOverride,
     this.home,
+    this.fontFamily,
+    this.fontFamilyFallback,
   });
 
   final SettingsStore settings;
@@ -37,6 +39,11 @@ class IWantFigureApp extends StatelessWidget {
 
   /// Overrides the home route (tests).
   final Widget? home;
+
+  /// Optional font family/fallback for the theme (used by the screenshot
+  /// tool; the platform default is used when null).
+  final String? fontFamily;
+  final List<String>? fontFamilyFallback;
 
   static const seedColor = Color(0xFFE64A5F);
 
@@ -62,6 +69,8 @@ class IWantFigureApp extends StatelessWidget {
               theme: ThemeData(
                 colorScheme: ColorScheme.fromSeed(seedColor: seedColor),
                 useMaterial3: true,
+                fontFamily: fontFamily,
+                fontFamilyFallback: fontFamilyFallback,
               ),
               darkTheme: ThemeData(
                 colorScheme: ColorScheme.fromSeed(
@@ -69,6 +78,8 @@ class IWantFigureApp extends StatelessWidget {
                   brightness: Brightness.dark,
                 ),
                 useMaterial3: true,
+                fontFamily: fontFamily,
+                fontFamilyFallback: fontFamilyFallback,
               ),
               themeMode: ThemeMode.system,
               home: home ?? const HomeScreen(),

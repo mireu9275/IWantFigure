@@ -68,7 +68,12 @@ class ScenePainter extends CustomPainter {
     this.t = 0,
     this.textScaler = TextScaler.noScaling,
     this.labels = SceneLabels.defaults,
+    this.textStyle,
   });
+
+  /// Base style for labels (font family from the app theme); size, weight
+  /// and colour are set per label.
+  final TextStyle? textStyle;
 
   final Scene3D scene;
   final OrbitCamera camera;
@@ -140,7 +145,8 @@ class ScenePainter extends CustomPainter {
       oldDelegate.t != t ||
       oldDelegate.colors != colors ||
       oldDelegate.textScaler != textScaler ||
-      oldDelegate.labels != labels;
+      oldDelegate.labels != labels ||
+      oldDelegate.textStyle != textStyle;
 }
 
 /// A drawable collected for depth sorting.
@@ -669,7 +675,8 @@ class _Renderer {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(color: color, fontSize: fontSize, fontWeight: weight, height: 1.2),
+        style: (painter.textStyle ?? const TextStyle())
+            .copyWith(color: color, fontSize: fontSize, fontWeight: weight, height: 1.2),
       ),
       textDirection: TextDirection.ltr,
       textScaler: painter.textScaler,

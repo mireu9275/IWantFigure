@@ -133,6 +133,10 @@ dotnet run --project IWantFigure.Server
 - 보안: API 키는 서버에만. 앱→서버는 `X-App-Key`(선택)로 보호. 사진은 저장하지 않는다(학습용 수집은 별도 옵트인으로 설계할 것).
 - 자세한 실행·배포는 `server/README.md`.
 
+## 3.6 화면 캡처 도구
+
+`app/tool/screenshots_test.dart`는 실제 앱(모의 분석, 합성 기계 사진, Noop 얼굴 검출기)을 폰 크기로 렌더링해 `docs/images/*.png`를 만든다. 일반 테스트 스위트에는 포함되지 않으며 `flutter test tool/screenshots_test.dart`로 직접 실행한다. 한글·일본어 글리프를 위해 Noto Sans KR/JP 폰트 파일 경로를 `IWF_NOTO_FONT`로 줄 수 있다(없으면 시스템 기본 테스트 폰트로 렌더링됨). 오버레이·3D 라벨은 테마 폰트(`textTheme.bodySmall`)를 따르므로 실기에서는 OS 폰트로 표시된다.
+
 ## 4.1 CI
 
 `.github/workflows/ci.yml`이 푸시/PR마다 `flutter analyze` + `flutter test`(Flutter 3.47.5)와 `dotnet build` + `dotnet test`(.NET 10)를 실행한다.

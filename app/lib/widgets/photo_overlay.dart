@@ -838,10 +838,11 @@ class _OverlayPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
-        style: TextStyle(
+        style: (theme.textTheme.bodySmall ?? const TextStyle()).copyWith(
           color: Colors.white,
           fontSize: small ? 10 : 12,
           fontWeight: FontWeight.w600,
+          height: 1.2,
         ),
       ),
       textDirection: TextDirection.ltr,

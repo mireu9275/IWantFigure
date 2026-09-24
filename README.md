@@ -13,6 +13,18 @@
 | `shared/` | 앱·서버 공용 계약: JSON 스키마, 시스템 프롬프트, 샘플 응답 | |
 | `docs/` | 기획·기술 분석(`01`), 구현 가이드(`02`), 리서치 노트 | |
 
+## 화면
+
+| 홈 | 결과 · 사진 오버레이 | 결과 · 3D | 보정 모드 |
+|---|---|---|---|
+| ![홈](docs/images/home_ko.png) | ![사진 오버레이](docs/images/result_photo_ko.png) | ![3D](docs/images/result_3d_ko.png) | ![보정](docs/images/result_edit_ko.png) |
+
+| 설명 탭 (EN) | 사진 탭 (JA) | 최초 실행 동의 | 설정 |
+|---|---|---|---|
+| ![설명](docs/images/result_explain_en.png) | ![JA](docs/images/result_photo_ja.png) | ![동의](docs/images/consent_ko.png) | ![설정](docs/images/settings_ko.png) |
+
+캡처는 실제 앱을 위젯 테스트로 렌더링한 것입니다(모의 분석 + 합성 사진). 재생성: `cd app && flutter test tool/screenshots_test.dart`.
+
 ## 빠른 시작
 
 앱은 기본이 **모의(mock) 모드**라 서버 없이도 전체 흐름이 동작합니다.

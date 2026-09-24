@@ -204,6 +204,7 @@ class _SceneViewState extends State<SceneView> with SingleTickerProviderStateMix
                           t: motion == null ? 0 : _t.value,
                           textScaler: textScaler,
                           labels: widget.labels,
+                          textStyle: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
                     ),
