@@ -138,6 +138,7 @@ class SceneCorrections {
     this.claw,
     this.yawDeg,
     this.boxYOffsetMm,
+    this.clawRotation = ClawRotation.unknown,
   });
 
   static const none = SceneCorrections();
@@ -163,6 +164,11 @@ class SceneCorrections {
   /// back, 奥寄り). Photos cannot tell this reliably, so the user sets it.
   final double? boxYOffsetMm;
 
+  /// Twist of the claw unit while descending, as observed by the player.
+  /// The engine moves the claw centre so the twisted tip still lands on the
+  /// target (see [EngineOptions.clawRotationDeg]).
+  final ClawRotation clawRotation;
+
   bool get isEmpty =>
       prizeBbox == null &&
       topFaceRatio == null &&
@@ -171,7 +177,8 @@ class SceneCorrections {
       dropHole == null &&
       claw == null &&
       yawDeg == null &&
-      boxYOffsetMm == null;
+      boxYOffsetMm == null &&
+      clawRotation == ClawRotation.unknown;
 
   /// Returns a copy with the given fields replaced. Fields listed in
   /// [clear] are reset to `null` ("use the detected value again").
@@ -184,6 +191,7 @@ class SceneCorrections {
     NBox? claw,
     double? yawDeg,
     double? boxYOffsetMm,
+    ClawRotation? clawRotation,
     Set<String> clear = const {},
   }) =>
       SceneCorrections(
@@ -195,6 +203,9 @@ class SceneCorrections {
         claw: clear.contains('claw') ? null : claw ?? this.claw,
         yawDeg: clear.contains('yawDeg') ? null : yawDeg ?? this.yawDeg,
         boxYOffsetMm: clear.contains('boxYOffsetMm') ? null : boxYOffsetMm ?? this.boxYOffsetMm,
+        clawRotation: clear.contains('clawRotation')
+            ? ClawRotation.unknown
+            : clawRotation ?? this.clawRotation,
       );
 
   Map<String, dynamic> toJson() => {
@@ -206,6 +217,7 @@ class SceneCorrections {
         'claw': claw?.toList(),
         'yaw_deg': yawDeg,
         'box_y_offset_mm': boxYOffsetMm,
+        'claw_rotation': clawRotation.wire,
       };
 
   factory SceneCorrections.fromJson(Map<String, dynamic>? j) {
@@ -221,6 +233,7 @@ class SceneCorrections {
       claw: box(j['claw']),
       yawDeg: number(j['yaw_deg']),
       boxYOffsetMm: number(j['box_y_offset_mm']),
+      clawRotation: ClawRotation.fromWire(j['claw_rotation'] as String?),
     );
   }
 }
@@ -239,6 +252,7 @@ class EngineOptions {
     this.sideOffset = 0.22,
     this.defaultTopFaceRatio = 0.35,
     this.defaultBarGapRatio = 0.65,
+    this.clawRotationDeg = 15,
   });
 
   static const defaults = EngineOptions();
@@ -262,4 +276,8 @@ class EngineOptions {
 
   /// Bar gap as a fraction of the prize depth when the bars are not detected.
   final double defaultBarGapRatio;
+
+  /// How far the claw unit twists while descending when the player reported
+  /// a rotation direction (degrees). Typical UFO-catcher arms twist 10–20°.
+  final double clawRotationDeg;
 }

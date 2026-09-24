@@ -55,6 +55,7 @@ class OverlayGeometry {
     this.motionFrom,
     this.motionTo,
     this.barsSynthesized = false,
+    this.extraBars = const [],
   });
 
   final NBox prizeBbox;
@@ -65,6 +66,9 @@ class OverlayGeometry {
   /// Bar centre lines as [p0, p1].
   final List<Pt>? frontBar;
   final List<Pt>? backBar;
+
+  /// Additional detected bars (3-/4-bar setups), as centre lines.
+  final List<List<Pt>> extraBars;
   final NBox? dropHole;
   final NBox? claw;
 
@@ -91,6 +95,8 @@ class AimPlan {
     required this.scene,
     this.requestedPhotos = const [],
     this.finished = false,
+    this.barCount = 0,
+    this.clawRotation = ClawRotation.unknown,
   });
 
   final LayoutType layoutType;
@@ -118,6 +124,12 @@ class AimPlan {
 
   /// True once an observation reports the prize dropped.
   final bool finished;
+
+  /// Number of bars in the scene (0 for non-bridge layouts).
+  final int barCount;
+
+  /// Claw twist during descent that the plan compensates for.
+  final ClawRotation clawRotation;
 
   bool get canPlan => steps.isNotEmpty && overlay != null;
 

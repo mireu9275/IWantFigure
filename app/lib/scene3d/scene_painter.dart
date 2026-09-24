@@ -405,6 +405,43 @@ class _Renderer {
       _addSegment(pivot, elbow, ScenePainter._clawArm, widthMm: 10, into: _solids);
       _addSegment(elbow, tip, ScenePainter._clawArm, widthMm: 8, into: _solids);
     }
+
+    if (claw.rotation.isKnown) _addTwistArrow(claw, bodyBottom);
+  }
+
+  /// Curved arrow around the rod just under the claw body showing which way
+  /// the unit twists while descending (seen from above: X right, Y toward the
+  /// player, so increasing angle = clockwise).
+  void _addTwistArrow(SceneClaw claw, Vec3 bodyBottom) {
+    final clockwise = claw.rotation == ClawRotation.clockwise;
+    final color = colors.tertiary;
+    const radius = 95.0;
+    const steps = 14;
+    final z = bodyBottom.z - 28;
+    const start = 0.35; // radians, leaves a gap for the arrowhead
+    const sweep = 2 * math.pi - 0.9;
+    Vec3 at(double angle) => Vec3(
+          claw.center.x + radius * math.cos(angle),
+          claw.center.y + radius * math.sin(angle),
+          z,
+        );
+    var prev = at(clockwise ? start : -start);
+    for (var i = 1; i <= steps; i++) {
+      final a = start + sweep * i / steps;
+      final next = at(clockwise ? a : -a);
+      _addSegment(prev, next, color, widthMm: 6, into: _solids);
+      prev = next;
+    }
+    // Arrowhead: two short strokes at the end of the arc, pointing along the
+    // direction of travel.
+    final endAngle = clockwise ? start + sweep : -(start + sweep);
+    final tangent = clockwise
+        ? Vec3(-math.sin(endAngle), math.cos(endAngle), 0)
+        : Vec3(math.sin(endAngle), -math.cos(endAngle), 0);
+    final radial = Vec3(math.cos(endAngle), math.sin(endAngle), 0);
+    final tipPoint = prev + tangent * 22;
+    _addSegment(tipPoint, prev + radial * 18, color, widthMm: 6, into: _solids);
+    _addSegment(tipPoint, prev - radial * 18, color, widthMm: 6, into: _solids);
   }
 
   /// Dashed outline of the prize at its predicted pose.

@@ -210,10 +210,14 @@ class SceneClaw {
     this.clawCount = 2,
     this.openWidthMm = 180,
     this.restHeightMm = 520,
+    this.rotation = ClawRotation.unknown,
   });
 
   final Vec3 center;
   final int clawCount;
+
+  /// Twist of the unit during descent (drawn as a curved arrow when known).
+  final ClawRotation rotation;
 
   /// Distance between the two arm tips when fully open (2-claw).
   final double openWidthMm;

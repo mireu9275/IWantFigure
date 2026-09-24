@@ -141,6 +141,7 @@ class AimEngine {
       armPower: armPower,
       rationale: rationale,
       t: t,
+      clawRotation: corrections.clawRotation,
     );
     final abortIf = _abortConditions(analysis, technique, t);
 
@@ -160,6 +161,39 @@ class AimEngine {
         ko: '아암이 약한 것으로 관찰되어 발톱을 더 끝(端ギリギリ)에 걸도록 조준점을 옮겼습니다. 힘점이 무게중심에서 멀수록 적은 힘으로 크게 회전합니다.',
         ja: 'アームが弱いと観察されたため、爪を端ギリギリに掛けるよう狙いを寄せました。力点が重心から遠いほど小さな力で大きく回転します。',
         en: 'The arm looks weak, so the aim moved closer to the very edge (端ギリギリ): the farther the contact is from the centre of mass, the more it rotates per play.',
+      ));
+    }
+
+    final usesOneArm = steps.any((s) => s.arm != Arm.both);
+    if (usesOneArm) {
+      switch (corrections.clawRotation) {
+        case ClawRotation.clockwise:
+          rationale.add(t(
+            ko: '이 기계의 집게는 내려가며 시계 방향(위에서 볼 때)으로 약 ${options.clawRotationDeg.round()}° 돕니다. 회전 후에도 발톱이 목표에 닿도록 아암 중심을 반대 방향으로 보정했습니다.',
+            ja: 'この台のアームは下降中に（上から見て）時計回りに約${options.clawRotationDeg.round()}°回ります。回転後も爪が狙いに当たるよう、アーム中心を逆方向に補正しました。',
+            en: 'This claw twists about ${options.clawRotationDeg.round()}° clockwise (seen from above) while descending; the claw centre was offset the other way so the tip still lands on the target.',
+          ));
+        case ClawRotation.counterClockwise:
+          rationale.add(t(
+            ko: '이 기계의 집게는 내려가며 반시계 방향(위에서 볼 때)으로 약 ${options.clawRotationDeg.round()}° 돕니다. 회전 후에도 발톱이 목표에 닿도록 아암 중심을 반대 방향으로 보정했습니다.',
+            ja: 'この台のアームは下降中に（上から見て）反時計回りに約${options.clawRotationDeg.round()}°回ります。回転後も爪が狙いに当たるよう、アーム中心を逆方向に補正しました。',
+            en: 'This claw twists about ${options.clawRotationDeg.round()}° counter-clockwise (seen from above) while descending; the claw centre was offset the other way so the tip still lands on the target.',
+          ));
+        case ClawRotation.none:
+          break;
+        case ClawRotation.unknown:
+          warnings.add(t(
+            ko: '첫 플레이에서 집게가 내려가는 동안 어느 쪽으로 도는지(시계/반시계) 관찰해 입력하면 조준을 보정합니다.',
+            ja: '1手目でアームが下降中にどちら（時計/反時計）に回るか観察して入力すると、狙いを補正します。',
+            en: 'On the first play, watch which way the claw twists while descending (clockwise / counter-clockwise) and enter it to refine the aim.',
+          ));
+      }
+    }
+    if (geo.barCount >= 3) {
+      rationale.add(t(
+        ko: '바가 ${geo.barCount}개인 세팅입니다. 박스가 걸쳐 있는 두 바 사이가 낙하구이며, 중간 바에 박스가 걸리면 詰み가 되기 쉬우니 넓은 틈 쪽 끝을 노려 그쪽으로 세웁니다.',
+        ja: 'バーが${geo.barCount}本の設定です。箱が乗っている2本の間が落とし口で、中間のバーに箱が掛かると詰みやすいので、広い隙間側の端を狙ってそちらへ立てます。',
+        en: 'This setup has ${geo.barCount} bars. The drop is the gap between the two bars the box rests on; a box caught on a middle bar tends to get stuck, so aim at the end above the wider gap.',
       ));
     }
 
@@ -191,6 +225,8 @@ class AimEngine {
       scene: scene,
       requestedPhotos: analysis.needsMorePhotos,
       finished: finished,
+      barCount: analysis.layoutType.isBridge ? geo.barCount : 0,
+      clawRotation: corrections.clawRotation,
     );
   }
 
@@ -373,6 +409,7 @@ class AimEngine {
     required ArmPower armPower,
     required List<String> rationale,
     required _Tr t,
+    ClawRotation clawRotation = ClawRotation.unknown,
   }) {
     final inset = armPower == ArmPower.weak ? options.edgeInset * 0.5 : options.edgeInset;
     final side = options.sideOffset;
@@ -391,20 +428,31 @@ class AimEngine {
     }) {
       n++;
       final tip = onBbox ? geo.prizeBbox.at(v, u) : geo.top(u, v);
-      final shift = switch (arm) {
-        Arm.right => -geo.halfOpenImg,
-        Arm.left => geo.halfOpenImg,
-        Arm.both => 0.0,
-      };
-      final claw = Pt(tip.x + shift, tip.y).clamp01();
       final tipField = onBbox
           ? geo.fieldOnBbox(v, u)
           : geo.prizeBox.pointAt(u, v, 1.0);
-      final fieldShift = switch (arm) {
-        Arm.right => -options.clawOpenWidthMm / 2,
-        Arm.left => options.clawOpenWidthMm / 2,
+      // Offset from the claw centre to the chosen arm's tip, in field mm.
+      // When the unit twists while descending, the tip lands rotated; move
+      // the centre the opposite way so the twisted tip hits the target.
+      final half = options.clawOpenWidthMm / 2;
+      final theta = switch (clawRotation) {
+        ClawRotation.clockwise => options.clawRotationDeg * math.pi / 180,
+        ClawRotation.counterClockwise => -options.clawRotationDeg * math.pi / 180,
+        _ => 0.0,
+      };
+      final sideSign = switch (arm) {
+        Arm.right => 1.0,
+        Arm.left => -1.0,
         Arm.both => 0.0,
       };
+      // Seen from above with X right and Y toward the player, a clockwise
+      // twist moves the right tip toward the player (+Y).
+      final offX = sideSign * half * math.cos(theta);
+      final offY = sideSign * half * math.sin(theta);
+      final fieldSpan = geo.fieldXR - geo.fieldXL;
+      final dxImg = -offX / options.fieldWidthMm * fieldSpan;
+      final dyImg = spec.depthMm <= 0 ? 0.0 : -offY / spec.depthMm * geo.topFaceHeightImg;
+      final claw = Pt(tip.x + dxImg, tip.y + dyImg).clamp01();
       return AimStep(
         index: n,
         arm: arm,
@@ -412,7 +460,7 @@ class AimEngine {
         edge: edge,
         clawPoint: claw,
         tipPoint: tip.clamp01(),
-        fieldPoint: Vec3(tipField.x + fieldShift, tipField.y, tipField.z),
+        fieldPoint: Vec3(tipField.x - offX, tipField.y - offY, tipField.z),
         title: title,
         detail: detail,
       );
@@ -868,6 +916,17 @@ class AimEngine {
         material: tube ? SceneMaterial.rubberTube : SceneMaterial.metal,
         label: t(ko: '뒤 바(奥バー)', ja: '奥バー', en: 'back bar'),
       ));
+      for (var i = 0; i < geo.extraBarYMm.length; i++) {
+        final y = geo.extraBarYMm[i];
+        cylinders.add(SceneCylinder(
+          id: 'bar_extra_$i',
+          p0: Vec3(-hx, y, options.barHeightMm),
+          p1: Vec3(hx, y, options.barHeightMm),
+          radius: options.barRadiusMm,
+          material: tube ? SceneMaterial.rubberTube : SceneMaterial.metal,
+          label: t(ko: '바 ${i + 3}', ja: 'バー${i + 3}', en: 'bar ${i + 3}'),
+        ));
+      }
       hole = SceneDropHole(
         xMin: geo.boxXMm - options.fieldWidthMm * 0.3,
         xMax: geo.boxXMm + options.fieldWidthMm * 0.3,
@@ -901,6 +960,7 @@ class AimEngine {
         clawCount: analysis.machine.clawCount == 3 ? 3 : 2,
         openWidthMm: options.clawOpenWidthMm,
         restHeightMm: options.clawRestHeightMm,
+        rotation: corrections.clawRotation,
       );
       markers.add(SceneMarker(
         point: current.fieldPoint,
@@ -1015,6 +1075,7 @@ class AimEngine {
       motionFrom: from,
       motionTo: to?.clamp01(),
       barsSynthesized: geo.barsSynthesized,
+      extraBars: geo.extraBarLines,
     );
   }
 }
@@ -1028,6 +1089,8 @@ class _Geometry {
     required this.topFace,
     required this.frontBarLine,
     required this.backBarLine,
+    required this.extraBarLines,
+    required this.extraBarYMm,
     required this.barsSynthesized,
     required this.dropHole,
     required this.claw,
@@ -1047,7 +1110,18 @@ class _Geometry {
   final List<Pt> topFace;
   final List<Pt>? frontBarLine;
   final List<Pt>? backBarLine;
+
+  /// Bars other than the supporting pair (3-/4-bar setups): image lines and
+  /// their estimated field Y positions.
+  final List<List<Pt>> extraBarLines;
+  final List<double> extraBarYMm;
   final bool barsSynthesized;
+
+  /// Total number of bars (supporting pair + extras) when the layout is a bridge.
+  int get barCount => (frontBarLine == null ? 0 : 1) + (backBarLine == null ? 0 : 1) + extraBarLines.length;
+
+  /// Image height of the prize top face (front edge → back edge).
+  double get topFaceHeightImg => (topFace[0].y - topFace[3].y).abs();
   final NBox? dropHole;
   final NBox? claw;
 
@@ -1105,14 +1179,21 @@ class _Geometry {
     // Bars ------------------------------------------------------------------
     NBox? front = corrections.frontBar?.normalized();
     NBox? back = corrections.backBar?.normalized();
+    final detectedBars = analysis.objects.where((o) => o.kind.isBar).map((o) => o.bbox).toList()
+      ..sort((a, b) => a.cy.compareTo(b.cy));
     if (front == null || back == null) {
-      final bars = analysis.objects.where((o) => o.kind.isBar).map((o) => o.bbox).toList()
-        ..sort((a, b) => a.cy.compareTo(b.cy));
-      if (bars.length >= 2) {
-        back ??= bars.first;
-        front ??= bars.last;
-      } else if (bars.length == 1) {
-        final b = bars.single;
+      if (detectedBars.length >= 2) {
+        // 3-/4-bar setups: the supporting pair is the outermost bars that
+        // touch the prize (between its top face and its bottom edge); fall
+        // back to the outermost bars overall.
+        final touching = detectedBars
+            .where((b) => b.cy >= prizeBbox.y1 - 0.03 && b.cy <= prizeBbox.y2 + 0.04)
+            .toList();
+        final pool = touching.length >= 2 ? touching : detectedBars;
+        back ??= pool.first;
+        front ??= pool.last;
+      } else if (detectedBars.length == 1) {
+        final b = detectedBars.single;
         if (b.cy > prizeBbox.cy) {
           front ??= b;
         } else {
@@ -1120,6 +1201,10 @@ class _Geometry {
         }
       }
     }
+    final extras = <NBox>[
+      for (final b in detectedBars)
+        if (b != front && b != back) b,
+    ];
     var synthesized = false;
     if (layout.isBridge) {
       if (front == null) {
@@ -1162,6 +1247,18 @@ class _Geometry {
     // Front/back position cannot be read from a single front photo
     // (perspective bias), so it is 0 unless the user says otherwise.
     final boxY = (corrections.boxYOffsetMm ?? 0).clamp(-0.4 * spec.depthMm, 0.4 * spec.depthMm);
+    // Extra bars: place them in the field by interpolating their image row
+    // between the supporting pair (front bar = +gap/2, back bar = −gap/2).
+    final extraLines = <List<Pt>>[];
+    final extraY = <double>[];
+    if (layout.isBridge && front != null && back != null) {
+      final span = (front.cy - back.cy).abs();
+      for (final b in extras) {
+        extraLines.add([Pt(b.x1, b.cy), Pt(b.x2, b.cy)]);
+        final f = span < 1e-6 ? 0.5 : ((front.cy - b.cy) / span);
+        extraY.add((gap / 2 - f * gap).clamp(-gap / 2 - 150.0, gap / 2 + 150.0));
+      }
+    }
     final double boxZ;
     if (layout.isBridge) {
       boxZ = options.barHeightMm + options.barRadiusMm + spec.heightMm / 2;
@@ -1186,6 +1283,8 @@ class _Geometry {
       topFace: topFace,
       frontBarLine: frontLine,
       backBarLine: backLine,
+      extraBarLines: extraLines,
+      extraBarYMm: extraY,
       barsSynthesized: synthesized,
       dropHole: dropHole,
       claw: claw,

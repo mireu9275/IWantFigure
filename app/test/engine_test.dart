@@ -253,4 +253,57 @@ void main() {
     }
     expect(seen, [1, 2, 1, 2]);
   });
+
+  test('3- and 4-bar setups: supporting pair brackets the prize, extras are drawn', () {
+    final r = _sample();
+    // Add a middle bar between the two detected bars and one far in front.
+    final more = r.copyWith(objects: [
+      ...r.objects,
+      const DetectedObject(id: 'bar_mid', kind: ObjectKind.bar, bbox: NBox(0.13, 0.60, 0.87, 0.63)),
+      const DetectedObject(id: 'bar_far', kind: ObjectKind.bar, bbox: NBox(0.10, 0.90, 0.90, 0.93)),
+    ]);
+    final plan = engine.plan(more);
+    expect(plan.canPlan, isTrue);
+    expect(plan.barCount, 4);
+    // Supporting pair is still the pair touching the box (0.515 / 0.715), not the far bar.
+    expect(plan.overlay!.frontBar!.first.y, closeTo(0.715, 0.01));
+    expect(plan.overlay!.backBar!.first.y, closeTo(0.515, 0.01));
+    expect(plan.overlay!.extraBars.length, 2);
+    expect(plan.scene.cylinders.length, 4);
+    // Middle bar sits between the pair in the field; far bar is in front of the front bar.
+    final ys = plan.scene.cylinders.map((c) => c.p0.y).toList();
+    final gap = plan.scene.cylinders[0].p0.y - plan.scene.cylinders[1].p0.y;
+    expect(ys[2], inExclusiveRange(-gap / 2, gap / 2));
+    expect(ys[3], greaterThan(gap / 2));
+    expect(plan.rationale.any((w) => w.contains('4')), isTrue);
+  });
+
+  test('claw rotation compensation moves the claw centre opposite to the twist', () {
+    final r = _sample();
+    final base = engine.plan(r);
+    final cw = engine.plan(r, corrections: const SceneCorrections(clawRotation: ClawRotation.clockwise));
+    final ccw = engine.plan(r, corrections: const SceneCorrections(clawRotation: ClawRotation.counterClockwise));
+    final none = engine.plan(r, corrections: const SceneCorrections(clawRotation: ClawRotation.none));
+    AimStep right(AimPlan p) => p.steps.firstWhere((s) => s.arm == Arm.right);
+    AimStep left(AimPlan p) => p.steps.firstWhere((s) => s.arm == Arm.left);
+    // Tip targets are unchanged; only the claw centre moves.
+    expect(right(cw).tipPoint, right(base).tipPoint);
+    // Right arm, clockwise twist: tip swings toward the player (+Y) → centre goes back (−Y).
+    expect(right(cw).fieldPoint.y, lessThan(right(base).fieldPoint.y));
+    expect(right(ccw).fieldPoint.y, greaterThan(right(base).fieldPoint.y));
+    // Left arm: mirrored.
+    expect(left(cw).fieldPoint.y, greaterThan(left(base).fieldPoint.y));
+    expect(left(ccw).fieldPoint.y, lessThan(left(base).fieldPoint.y));
+    // Image-space claw point moves up (smaller y) for the right arm / clockwise.
+    expect(right(cw).clawPoint.y, lessThan(right(base).clawPoint.y));
+    // The x offset shrinks slightly with the twist (cos θ < 1).
+    expect((right(cw).fieldPoint.x - right(cw).tipPoint.x).abs(), lessThan((right(base).fieldPoint.x - right(base).tipPoint.x).abs() + 1e-9));
+    expect(none.steps.first.fieldPoint, base.steps.first.fieldPoint);
+    expect(cw.clawRotation, ClawRotation.clockwise);
+    expect(cw.scene.claw!.rotation, ClawRotation.clockwise);
+    expect(cw.rationale.any((w) => w.contains('시계')), isTrue);
+    expect(base.warnings.any((w) => w.contains('시계')), isTrue, reason: 'unknown rotation → ask the player to observe');
+    expect(none.warnings.any((w) => w.contains('시계')), isFalse);
+    expect(SceneCorrections.fromJson(cw.scene.claw == null ? null : const SceneCorrections(clawRotation: ClawRotation.clockwise).toJson()).clawRotation, ClawRotation.clockwise);
+  });
 }

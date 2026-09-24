@@ -162,6 +162,25 @@ enum AssistLamp {
       );
 }
 
+/// Which way the claw unit twists while it descends (seen from above).
+/// Not visible in a photo: the player observes it on the first play.
+enum ClawRotation {
+  unknown('unknown'),
+  none('none'),
+  clockwise('clockwise'),
+  counterClockwise('counter_clockwise');
+
+  const ClawRotation(this.wire);
+  final String wire;
+
+  static ClawRotation fromWire(String? value) => ClawRotation.values.firstWhere(
+        (e) => e.wire == value,
+        orElse: () => ClawRotation.unknown,
+      );
+
+  bool get isKnown => this == clockwise || this == counterClockwise;
+}
+
 enum ExitSide {
   front('front'),
   left('left'),
