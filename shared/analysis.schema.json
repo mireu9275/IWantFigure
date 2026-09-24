@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CraneAnalysis",
+  "description": "LLM output for one crane-game photo. All coordinates are normalized to the analyzed image: x,y in [0,1], origin top-left, x to the right, y downward. (Provider adapters convert from pixel or 0-1000 coordinates before this schema is applied.)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["layout_type", "confidence", "machine", "objects", "strategy", "explanation", "needs_more_photos", "warnings"],
+  "properties": {
+    "layout_type": {
+      "type": "string",
+      "enum": ["bridge_parallel", "bridge_hanoji", "bridge_step", "front_drop", "valley_drop", "side_drop", "ring_pera", "ring_d", "hook_s", "takoyaki", "three_claw", "two_claw_direct", "pile", "floor_box", "unknown"]
+    },
+    "confidence": { "type": "number", "description": "0..1" },
+    "machine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claw_count", "arm_power_estimate", "assist_lamp", "exit_side"],
+      "properties": {
+        "claw_count": { "type": "integer", "description": "2, 3, or 0 when unknown" },
+        "arm_power_estimate": { "type": "string", "enum": ["weak", "medium", "strong", "unknown"] },
+        "assist_lamp": { "type": "string", "enum": ["none", "blue", "green", "unknown"] },
+        "exit_side": { "type": "string", "enum": ["front", "left", "right", "back", "center", "unknown"] }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "bbox", "notes"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "type": "string", "enum": ["box", "plush", "bar", "tube_bar", "claw", "drop_hole", "ring", "shelf", "other"] },
+          "bbox": { "type": "array", "items": { "type": "number" }, "description": "[x1, y1, x2, y2] normalized 0..1" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["technique", "target_object_id", "target_edge", "arm", "sequence", "abort_if", "expected_motion"],
+      "properties": {
+        "technique": { "type": "string", "enum": ["tate_hame", "yoko_hame", "zurashi", "yose", "oshikomi", "mochiage", "hikkake", "noriage", "tsuki", "otoshi", "nadare", "kado_oshi", "unknown"] },
+        "target_object_id": { "type": "string" },
+        "target_edge": { "type": "string", "enum": ["front_left", "front_right", "back_left", "back_right", "front", "back", "left", "right", "center"] },
+        "arm": { "type": "string", "enum": ["left", "right", "both"] },
+        "sequence": { "type": "array", "items": { "type": "string" } },
+        "abort_if": { "type": "array", "items": { "type": "string" } },
+        "expected_motion": { "type": "string" }
+      }
+    },
+    "explanation": { "type": "string" },
+    "needs_more_photos": { "type": "array", "items": { "type": "string" } },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}

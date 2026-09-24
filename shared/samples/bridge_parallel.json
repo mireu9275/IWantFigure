@@ -1,0 +1,28 @@
+{
+  "layout_type": "bridge_parallel",
+  "confidence": 0.82,
+  "machine": { "claw_count": 2, "arm_power_estimate": "unknown", "assist_lamp": "blue", "exit_side": "center" },
+  "objects": [
+    { "id": "box1", "kind": "box", "bbox": [0.36, 0.42, 0.64, 0.74], "notes": "figure box, window facing front, slightly rotated" },
+    { "id": "bar_front", "kind": "bar", "bbox": [0.12, 0.70, 0.88, 0.73], "notes": "metal front bar (手前バー)" },
+    { "id": "bar_back", "kind": "bar", "bbox": [0.14, 0.50, 0.86, 0.53], "notes": "metal back bar (奥バー)" },
+    { "id": "claw1", "kind": "claw", "bbox": [0.44, 0.05, 0.58, 0.30], "notes": "two-claw unit at rest" },
+    { "id": "hole1", "kind": "drop_hole", "bbox": [0.20, 0.53, 0.80, 0.70], "notes": "gap between bars" }
+  ],
+  "strategy": {
+    "technique": "tate_hame",
+    "target_object_id": "box1",
+    "target_edge": "back_right",
+    "arm": "right",
+    "sequence": [
+      "Right arm tip just inside the back-right corner: lifts the back end so the box tilts on the front bar.",
+      "Left arm tip at the back-left corner to straighten the box if it yaws.",
+      "Repeat until the box stands vertically between the bars and slides down."
+    ],
+    "abort_if": ["No movement after 3 plays", "Box ends up flat on both bars (詰み) – ask staff to reset"],
+    "expected_motion": "Back end rises, box rotates about the front bar and its front end drops into the gap."
+  },
+  "explanation": "This is a standard bridge setup (橋渡し). The box is heavy, so stand it up (縦ハメ) instead of trying to lift it: put one claw tip just inside the back end and alternate sides.",
+  "needs_more_photos": [],
+  "warnings": ["Arm power is not visible in the photo; check how much the box moves on the first play."]
+}

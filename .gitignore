@@ -1,0 +1,23 @@
+# OS / editors
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Flutter (app/)
+app/.dart_tool/
+app/.flutter-plugins*
+app/.packages
+app/build/
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/ephemeral/
+app/android/.gradle/
+app/android/local.properties
+app/*.iml
+
+# .NET (server/)
+server/**/bin/
+server/**/obj/
+server/**/*.user
+server/.vs/
