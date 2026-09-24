@@ -43,6 +43,8 @@ class SettingsStore extends ChangeNotifier {
   static const _kLocale = 'locale';
   static const _kPrizePreset = 'prize_preset';
   static const _kShowGuide = 'show_shooting_guide';
+  static const _kBlurFaces = 'blur_faces';
+  static const _kConsent = 'consent_given';
 
   SharedPreferences? _prefs;
 
@@ -52,6 +54,8 @@ class SettingsStore extends ChangeNotifier {
   AppLocale _locale = AppLocale.ko;
   PrizePreset _prizePreset = PrizePreset.figureBoxM;
   bool _showShootingGuide = true;
+  bool _blurFaces = true;
+  bool _consentGiven = false;
 
   bool get loaded => _prefs != null;
 
@@ -73,6 +77,13 @@ class SettingsStore extends ChangeNotifier {
       _prizePreset == PrizePreset.figureBoxM ? null : _prizePreset.spec;
   bool get showShootingGuide => _showShootingGuide;
 
+  /// Pixelate detected faces on the device before analysis/storage.
+  bool get blurFaces => _blurFaces;
+
+  /// The user accepted the first-launch notice about photo upload,
+  /// overseas processing and face blurring.
+  bool get consentGiven => _consentGiven;
+
   /// Localized strings for the current locale.
   S get strings => S(_locale);
 
@@ -85,6 +96,8 @@ class SettingsStore extends ChangeNotifier {
     _locale = AppLocale.fromCode(p.getString(_kLocale));
     _prizePreset = PrizePreset.fromName(p.getString(_kPrizePreset));
     _showShootingGuide = p.getBool(_kShowGuide) ?? true;
+    _blurFaces = p.getBool(_kBlurFaces) ?? true;
+    _consentGiven = p.getBool(_kConsent) ?? false;
     S.current = strings;
     notifyListeners();
   }
@@ -123,6 +136,18 @@ class SettingsStore extends ChangeNotifier {
   Future<void> setShowShootingGuide(bool value) async {
     _showShootingGuide = value;
     await _prefs?.setBool(_kShowGuide, value);
+    notifyListeners();
+  }
+
+  Future<void> setBlurFaces(bool value) async {
+    _blurFaces = value;
+    await _prefs?.setBool(_kBlurFaces, value);
+    notifyListeners();
+  }
+
+  Future<void> setConsentGiven(bool value) async {
+    _consentGiven = value;
+    await _prefs?.setBool(_kConsent, value);
     notifyListeners();
   }
 

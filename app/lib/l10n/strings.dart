@@ -131,6 +131,30 @@ class S {
 
   String get analyzingTitle => _t('분석 중', '解析中', 'Analyzing');
   String get stagePrepare => _t('사진 준비', '写真を準備', 'Preparing photo');
+  String get stageBlur => _t('얼굴 가리기', '顔をぼかす', 'Hiding faces');
+  String facesBlurred(int n) => n == 0
+      ? _t('감지된 얼굴 없음', '顔は検出されませんでした', 'No faces detected')
+      : _t('얼굴 $n개를 가렸습니다', '顔を$n件ぼかしました', 'Hid $n face(s)');
+  String get blurFaces => _t('얼굴 자동 가리기', '顔を自動でぼかす', 'Blur faces automatically');
+  String get consentTitle => _t('시작하기 전에', 'はじめる前に', 'Before you start');
+  String get consentBody => _t(
+        '조준 위치를 추천하기 위해 촬영한 기계 사진이 분석 서버와 미국 소재 인공지능 서비스(Google 또는 Anthropic)로 전송됩니다. 서버는 사진을 저장하지 않습니다.\n\n'
+            '전송 전에 기기 안에서 사람 얼굴을 자동으로 가립니다. 다른 손님이 찍히지 않도록 주의하고, 매장의 촬영 규정을 지켜 주세요.\n\n'
+            '추천은 참고용이며 경품 획득을 보장하지 않습니다. 모의 모드에서는 사진이 전송되지 않습니다.',
+        '狙い所を提案するため、撮影した筐体の写真は解析サーバーと米国のAIサービス（Google または Anthropic）へ送信されます。サーバーは写真を保存しません。\n\n'
+            '送信前に端末内で人の顔を自動的にぼかします。他のお客様が写らないよう注意し、店舗の撮影ルールを守ってください。\n\n'
+            '提案は参考情報であり、景品の獲得を保証するものではありません。モックモードでは写真は送信されません。',
+        'To recommend where to aim, the photo of the machine is sent to our analysis server and to an AI service in the United States (Google or Anthropic). The server does not store photos.\n\n'
+            'Faces are blurred on your device before upload. Avoid photographing other customers and follow the arcade\'s photo rules.\n\n'
+            'Recommendations are advisory and do not guarantee a prize. In mock mode no photo is sent.',
+      );
+  String get consentAgree => _t('동의하고 시작', '同意して始める', 'Agree and start');
+  String get consentMockOnly => _t('모의 모드로만 사용', 'モックモードのみ使う', 'Use mock mode only');
+  String get blurFacesHint => _t(
+        '전송·저장 전에 기기 안에서 사람 얼굴을 모자이크 처리합니다. 다른 손님의 개인정보 보호를 위해 켜 두세요.',
+        '送信・保存の前に端末内で人の顔をモザイク処理します。他のお客様のプライバシー保護のためオンのままにしてください。',
+        'Pixelates faces on the device before upload and storage. Keep it on to protect other customers\' privacy.',
+      );
   String get stageServer => _t('서버 분석', 'サーバーで解析', 'Server analysis');
   String get stageAim => _t('조준 계산', '狙いを計算', 'Computing aim');
   String get analyzeFailed => _t('분석에 실패했습니다', '解析に失敗しました', 'Analysis failed');

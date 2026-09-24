@@ -3,6 +3,8 @@ library;
 
 import 'package:flutter/widgets.dart';
 
+import '../services/face_blur.dart';
+
 import '../services/api_client.dart';
 import '../services/history_store.dart';
 import '../services/image_prep.dart';
@@ -18,6 +20,7 @@ class AppScope extends InheritedWidget {
     required this.settings,
     required this.history,
     required this.picker,
+    required this.faceDetector,
     this.serviceOverride,
     required super.child,
   });
@@ -25,6 +28,9 @@ class AppScope extends InheritedWidget {
   final SettingsStore settings;
   final HistoryStore history;
   final PhotoPicker picker;
+
+  /// On-device face detector used before a photo is uploaded or stored.
+  final FaceRegionDetector faceDetector;
 
   /// When set (tests), returned by [buildService] regardless of settings.
   final AnalysisService? serviceOverride;
@@ -50,5 +56,6 @@ class AppScope extends InheritedWidget {
       settings != oldWidget.settings ||
       history != oldWidget.history ||
       picker != oldWidget.picker ||
+      faceDetector != oldWidget.faceDetector ||
       serviceOverride != oldWidget.serviceOverride;
 }

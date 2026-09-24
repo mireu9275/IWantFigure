@@ -9,7 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  google_mlkit_face_detection: ^0.15.1
   http: ^1.6.0
+  image: ^4.10.1
   image_picker: ^1.2.3
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5

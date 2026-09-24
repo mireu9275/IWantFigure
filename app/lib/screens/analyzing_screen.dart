@@ -116,6 +116,7 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
                       const Center(child: CircularProgressIndicator()),
                       const SizedBox(height: 16),
                       _stageRow(context, s.stagePrepare, AnalyzeStage.prepare),
+                      if (c.blurFaces) _stageRow(context, s.stageBlur, AnalyzeStage.blur),
                       _stageRow(context, s.stageServer, AnalyzeStage.server),
                       _stageRow(context, s.stageAim, AnalyzeStage.aim),
                     ] else ...[

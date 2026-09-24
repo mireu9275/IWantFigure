@@ -114,6 +114,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.face_retouching_off_outlined),
+                title: Text(s.blurFaces),
+                subtitle: Text(s.blurFacesHint),
+                value: settings.blurFaces,
+                onChanged: settings.setBlurFaces,
+              ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.tips_and_updates_outlined),

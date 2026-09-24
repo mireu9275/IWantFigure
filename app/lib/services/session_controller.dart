@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import '../engine/aim_engine.dart';
 import '../models/analysis.dart';
 import 'api_client.dart';
+import 'face_blur.dart';
 import 'history_store.dart';
 import 'image_prep.dart';
 
@@ -17,7 +18,7 @@ import 'image_prep.dart';
 enum SessionState { idle, analyzing, ready, error }
 
 /// Progress steps shown while analyzing.
-enum AnalyzeStage { prepare, server, aim }
+enum AnalyzeStage { prepare, blur, server, aim }
 
 /// Holds everything about the current session and recomputes the plan with
 /// [AimEngine] whenever an input changes (coalesced into one microtask).
@@ -30,6 +31,9 @@ class SessionController extends ChangeNotifier {
     this.engine = const AimEngine(),
     this.history,
     this.hints,
+    this.faceDetector = const NoopFaceRegionDetector(),
+    this.blurFaces = true,
+    this.blurrer = const FaceBlurrer(),
   }) : _prize = prize; // ignore: prefer_initializing_formals
 
   /// Reopens a saved session read-only (no observations can be added).
@@ -49,6 +53,9 @@ class SessionController extends ChangeNotifier {
         _prize = entry.prize,
         history = null,
         hints = null,
+        faceDetector = const NoopFaceRegionDetector(),
+        blurFaces = false,
+        blurrer = const FaceBlurrer(),
         readOnly = true,
         _analysis = entry.analysis,
         _corrections = entry.corrections,
@@ -60,7 +67,20 @@ class SessionController extends ChangeNotifier {
     _recomputePlan();
   }
 
-  final PickedPhoto photo;
+  /// The photo in use. Replaced by the anonymised version once faces were
+  /// pixelated, so the overlay, the upload and the history all use it.
+  PickedPhoto photo;
+
+  /// On-device face detector used before upload; faces are pixelated by
+  /// [blurrer]. Off when [blurFaces] is false.
+  final FaceRegionDetector faceDetector;
+  final bool blurFaces;
+  final FaceBlurrer blurrer;
+
+  int _blurredFaces = 0;
+
+  /// Faces pixelated in [photo] during the last [analyze] (0 when none).
+  int get blurredFaces => _blurredFaces;
   final AimEngine engine;
   final HistoryStore? history;
   final AnalyzeHints? hints;
@@ -134,10 +154,32 @@ class SessionController extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      // Nothing to do for "prepare" beyond the decode already done by the
-      // picker; yield once so the UI can show the stage.
+      // "prepare" is the decode already done by the picker; yield once so
+      // the UI can show the stage.
       await Future<void>.delayed(Duration.zero);
       if (stale()) return;
+      if (blurFaces) {
+        _stage = AnalyzeStage.blur;
+        notifyListeners();
+        final blurred = await anonymiseFaces(
+          bytes: photo.bytes,
+          width: photo.width,
+          height: photo.height,
+          path: photo.path,
+          detector: faceDetector,
+          blurrer: blurrer,
+        );
+        if (stale()) return;
+        _blurredFaces = blurred.faceCount;
+        if (blurred.changed) {
+          photo = PickedPhoto(
+            bytes: blurred.bytes,
+            width: blurred.width,
+            height: blurred.height,
+            path: photo.path,
+          );
+        }
+      }
       _stage = AnalyzeStage.server;
       notifyListeners();
       final result = await svc.analyze(

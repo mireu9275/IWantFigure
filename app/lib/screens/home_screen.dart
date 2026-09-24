@@ -25,9 +25,56 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _picking = false;
+  bool _consentShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureConsent());
+  }
+
+  /// Shows the first-launch notice (photo upload, overseas AI processing,
+  /// face blurring) until the user accepts it. Returns true when accepted.
+  Future<bool> _ensureConsent() async {
+    if (!mounted) return false;
+    final settings = AppScope.of(context).settings;
+    if (settings.consentGiven) return true;
+    if (_consentShown) return false;
+    _consentShown = true;
+    final s = S.of(context);
+    final agreed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: Text(s.consentTitle),
+          content: SingleChildScrollView(child: Text(s.consentBody)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(s.consentMockOnly),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(s.consentAgree),
+            ),
+          ],
+        ),
+      ),
+    );
+    _consentShown = false;
+    if (!mounted) return false;
+    if (agreed == false) {
+      await settings.setMockMode(true);
+    }
+    await settings.setConsentGiven(true);
+    return true;
+  }
 
   Future<void> _pick(PhotoSource source) async {
     if (_picking) return;
+    if (!await _ensureConsent() || !mounted) return;
     final scope = AppScope.of(context);
     final s = S.of(context);
     setState(() => _picking = true);
@@ -47,6 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
       locale: scope.settings.locale.code,
       prize: scope.settings.sessionPrize,
       history: scope.history,
+      faceDetector: scope.faceDetector,
+      blurFaces: scope.settings.blurFaces,
     );
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => AnalyzingScreen(controller: controller)),

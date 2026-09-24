@@ -66,13 +66,13 @@ IWantFigure/
 | `lib/models/scene.dart` | `Scene3D`와 구성요소(`SceneBox`, `SceneCylinder`, `SceneClaw`, `SceneMarker`, `SceneMotion`), `Vec3`/`Pose`/`Rotation` | 필드 좌표계 mm |
 | `lib/engine/` | `AimEngine`(룰 엔진), `inputs.dart`(PrizeSpec, Observation, SceneCorrections, EngineOptions), `aim_plan.dart`(AimPlan, AimStep, OverlayGeometry) | 순수 Dart, `flutter test`로 검증 |
 | `lib/scene3d/` | 소프트웨어 3D 렌더러(`OrbitCamera`, `ScenePainter`, `SceneView`) | 외부 패키지 없음 |
-| `lib/services/` | `SettingsStore`(SharedPreferences), `AnalyzeApi`/`MockAnalyzeApi`, `PhotoPicker`(image_picker), `HistoryStore`(문서 폴더 JSON + 사진 복사, 원자적 저장), `SessionController`(분석·보정·관찰·플랜 재계산) | |
+| `lib/services/` | `SettingsStore`(SharedPreferences), `AnalyzeApi`/`MockAnalyzeApi`, `PhotoPicker`(image_picker), `HistoryStore`(문서 폴더 JSON + 사진 복사, 원자적 저장), `SessionController`(분석·보정·관찰·플랜 재계산), **`face_blur.dart`**(얼굴 모자이크, 순수 Dart) + **`mlkit_face_detector.dart`**(ML Kit 온디바이스 검출) | |
 | `lib/app/` | `IWantFigureApp`, `AppScope`(설정·히스토리·서비스 주입) | |
 | `lib/screens/` | `HomeScreen` → `AnalyzingScreen` → `ResultScreen`(사진/3D/설명 탭) , `SettingsScreen` | |
 | `lib/widgets/` | `PhotoOverlay`(오버레이·보정 핸들·줌), `CurrentStepCard`, `ObservationBar`, `PrizeSheet`, `ExplanationTab`, `ArmBadge` | |
 | `lib/l10n/strings.dart` | ko/ja/en 문자열(`S.of(context)`) | 사용자 노출 문자열은 전부 여기 |
 | `assets/samples/` | 모크용 샘플 응답 | `shared/samples`의 복사본 |
-| `test/` | 엔진 15, 3D 16, UI·서비스 51 = 82건 | `flutter test` |
+| `test/` | 엔진 15, 3D 16, UI·서비스·블러·동의 60 = 91건 | `flutter test` |
 
 ### 3.2 좌표계 두 가지
 
@@ -94,7 +94,13 @@ IWantFigure/
 
 룰 근거는 `01_기획_기술_분석.md` 3장의 표와 동일하며, 모두 커뮤니티 휴리스틱(원문 재확인 필요 ★)이다. 수치는 실측으로 튜닝할 것.
 
-### 3.4 실행
+### 3.4 개인정보 처리 흐름
+
+1. 최초 실행 시 동의 다이얼로그(`HomeScreen._ensureConsent`): 사진이 분석 서버와 미국 소재 AI로 전송됨, 얼굴 자동 블러, 참고용 추천임을 안내. "모의 모드로만 사용"을 고르면 모의 모드가 강제된다. 동의 전에는 촬영 버튼도 다이얼로그를 먼저 띄운다.
+2. `SessionController.analyze()`의 `blur` 단계: `FaceRegionDetector`(기본 `MlKitFaceRegionDetector`, 기기 내 처리)로 얼굴을 찾고 `FaceBlurrer`가 백그라운드 isolate에서 모자이크 처리 → 이후 업로드·오버레이·히스토리 모두 블러된 사진을 사용한다. 설정의 "얼굴 자동 가리기"(기본 ON)로 제어.
+3. ML Kit 플러그인 요구사항: iOS 배포 타깃 15.5(`ios/Podfile`, Xcode 프로젝트에 반영됨), Android는 Flutter 기본 minSdk로 충분. 이 환경에서는 Android SDK 호스트(dl.google.com)가 차단되어 **실기 빌드는 검증하지 못했다** — 첫 `flutter run`에서 플러그인 빌드 문제가 나면 `MlKitFaceRegionDetector` 대신 `NoopFaceRegionDetector`를 주입해 격리할 수 있다(`IWantFigureApp(faceDetector: ...)`).
+
+### 3.5 실행
 
 ```bash
 export PATH=/opt/flutter-sdk/flutter/bin:$PATH   # 또는 로컬 Flutter 3.47.x
@@ -127,6 +133,10 @@ dotnet run --project IWantFigure.Server
 - 보안: API 키는 서버에만. 앱→서버는 `X-App-Key`(선택)로 보호. 사진은 저장하지 않는다(학습용 수집은 별도 옵트인으로 설계할 것).
 - 자세한 실행·배포는 `server/README.md`.
 
+## 4.1 CI
+
+`.github/workflows/ci.yml`이 푸시/PR마다 `flutter analyze` + `flutter test`(Flutter 3.47.5)와 `dotnet build` + `dotnet test`(.NET 10)를 실행한다.
+
 ## 5. 검증 이력
 
 - 2026-09-24: 엔진/3D, 앱 UI, 서버 각각 별도 리뷰(재현 기반)를 거쳐 결함을 수정했다. 주요 항목: 3D 회전 방향과 사용자 회전 보정 유지, 링·인형 표적의 앞뒤 반전, 퇴화 bbox의 NaN, 히스토리 파일 손상 시 전체 소실, 저장 실패 처리, 중복 분석 요청 경합, 줌 상태에서 탭 스와이프 충돌, 서버 오류 메시지 전달, 프록시 뒤 레이트리밋, 힌트 입력 상한, 비JPEG 디코드 메모리, Claude max_tokens 기본값.
@@ -134,9 +144,9 @@ dotnet run --project IWantFigure.Server
 ## 6. 남은 일 (우선순위)
 
 1. **실기 검증**: 실제 게임센터 사진 20~50장으로 유형 분류·객체 박스 품질을 Gemini/Claude 각각 측정하고, 룰 엔진의 `inset`/`side`/윗면 비율 기본값을 튜닝.
-2. **얼굴 블러**: 업로드 전 온디바이스 얼굴 검출·블러(ML Kit / Vision) — 개인정보(APPI) 대응 필수. MVP 코드에는 촬영 가이드 문구만 있음.
+2. **얼굴 블러 실기 검증**: 구현은 완료(ML Kit + 순수 Dart 모자이크). 실제 기기에서 검출률·처리 시간(1,456px 기준 목표 1초 이내)을 측정하고, 실패 시 재촬영 안내 UX를 보강.
 3. **3D 뷰를 Filament(thermion_flutter)로 교체 검토**: 현재 소프트웨어 렌더러는 프리미티브 10개 수준에 충분하지만 텍스처·조명 품질이 필요하면 교체.
 4. **경품 DB**: 제품명 → 치수·무게. 현재는 프리셋 + 수동 입력.
 5. **온디바이스 검출기(v1)**: 데이터가 쌓이면 RF-DETR Nano/YOLO26n으로 객체 박스를 앱에서 계산해 LLM 의존 축소.
 6. **AR(v2)**: `arkit_plugin` + `flutter_embed_unity` 경로.
-7. **스토어 준비**: 프라이버시 정책, 리뷰 노트(도박 아님·금전 거래 없음), IAP 설계.
+7. **스토어 준비**: `03_스토어_준비_프라이버시.md`의 초안(정책 문구·리뷰 노트)을 확정하고 정책 URL 게시, IAP 설계.

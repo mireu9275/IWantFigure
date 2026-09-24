@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../screens/home_screen.dart';
 import '../services/api_client.dart';
+import '../services/face_blur.dart';
 import '../services/history_store.dart';
+import '../services/mlkit_face_detector.dart';
 import '../services/image_prep.dart';
 import '../services/settings.dart';
 import 'app_scope.dart';
@@ -18,6 +20,7 @@ class IWantFigureApp extends StatelessWidget {
     required this.settings,
     required this.history,
     this.picker,
+    this.faceDetector,
     this.serviceOverride,
     this.home,
   });
@@ -29,6 +32,9 @@ class IWantFigureApp extends StatelessWidget {
   final PhotoPicker? picker;
   final AnalysisService? serviceOverride;
 
+  /// Face detector; ML Kit (on device) when null.
+  final FaceRegionDetector? faceDetector;
+
   /// Overrides the home route (tests).
   final Widget? home;
 
@@ -37,6 +43,7 @@ class IWantFigureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final picker = this.picker ?? PhotoPicker();
+    final faceDetector = this.faceDetector ?? const MlKitFaceRegionDetector();
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) {
@@ -45,6 +52,7 @@ class IWantFigureApp extends StatelessWidget {
           settings: settings,
           history: history,
           picker: picker,
+          faceDetector: faceDetector,
           serviceOverride: serviceOverride,
           child: LocaleScope(
             strings: strings,

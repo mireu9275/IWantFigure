@@ -12,6 +12,7 @@ import 'package:iwantfigure/app/app.dart';
 import 'package:iwantfigure/l10n/strings.dart';
 import 'package:iwantfigure/models/analysis.dart';
 import 'package:iwantfigure/services/api_client.dart';
+import 'package:iwantfigure/services/face_blur.dart';
 import 'package:iwantfigure/services/history_store.dart';
 import 'package:iwantfigure/services/image_prep.dart';
 import 'package:iwantfigure/services/settings.dart';
@@ -107,7 +108,8 @@ class FakeImagePicker extends ImagePicker {
 
 /// Builds a loaded [SettingsStore] on top of mock preferences.
 Future<SettingsStore> loadedSettings({Map<String, Object> initial = const {}}) async {
-  SharedPreferences.setMockInitialValues(initial);
+  // Tests opt out of the first-launch consent dialog unless they set it.
+  SharedPreferences.setMockInitialValues({'consent_given': true, ...initial});
   final s = SettingsStore();
   await s.load();
   return s;
@@ -127,6 +129,7 @@ Widget testApp({
       home: home,
       serviceOverride: service,
       picker: picker ?? PhotoPicker(picker: FakeImagePicker()),
+      faceDetector: const NoopFaceRegionDetector(),
     );
 
 /// Localized strings for [code] without a widget tree.
