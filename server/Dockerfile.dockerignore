@@ -1,0 +1,12 @@
+# Picked up automatically by BuildKit when building with -f server/Dockerfile.
+# Paths are relative to the build context (the repository root).
+.git
+.idea
+.vscode
+app/
+docs/
+server/**/bin/
+server/**/obj/
+server/**/*.user
+server/.vs/
+server/IWantFigure.Server.Tests/
