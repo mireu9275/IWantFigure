@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iwantfigure/engine/aim_engine.dart';
 import 'package:iwantfigure/models/analysis.dart';
@@ -111,5 +113,85 @@ void main() {
     expect(c.plan, isNull);
     expect(c.observations, isEmpty);
     expect(c.outcome, SessionOutcome.open);
+  });
+
+  test('finish keeps the session unsaved and rethrows when the store fails', () async {
+    final dir = tempHistoryDir('ctl_fail');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final store = ThrowingHistoryStore(dir);
+    final c = SessionController(
+      photo: await fakePhoto(),
+      service: FakeAnalysisService(sampleAnalysis()),
+      history: store,
+    );
+    await c.analyze();
+    c.addObservation(ObservationKind.dropped);
+    await Future<void>.delayed(Duration.zero);
+
+    await expectLater(
+      c.finish(SessionOutcome.success, plays: 3, yen: 300),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(store.attempts, 1);
+    expect(c.isSaved, isFalse);
+    expect(c.outcome, SessionOutcome.open);
+    expect(c.plays, 0);
+    expect(c.yen, 0);
+    expect(store.entries, isEmpty);
+
+    // A later successful save commits the outcome.
+    final ok = SessionController(
+      photo: c.photo,
+      service: FakeAnalysisService(sampleAnalysis()),
+      history: HistoryStore(directory: dir),
+    );
+    await ok.analyze();
+    await ok.finish(SessionOutcome.fail, plays: 2, yen: 200);
+    expect(ok.isSaved, isTrue);
+    expect(ok.outcome, SessionOutcome.fail);
+  });
+
+  test('a newer analyze() wins over a slower earlier one', () async {
+    final slowResult = sampleAnalysis().copyWith(confidence: 0.11);
+    final fastResult = sampleAnalysis().copyWith(confidence: 0.99);
+    final slow = FakeAnalysisService(slowResult, delay: const Duration(milliseconds: 120));
+    final fast = FakeAnalysisService(fastResult);
+    final c = SessionController(photo: await fakePhoto(), service: slow);
+
+    final first = c.analyze();
+    c.service = fast;
+    final second = c.analyze();
+    await Future.wait([first, second]);
+    expect(c.state, SessionState.ready);
+    expect(c.analysis!.confidence, 0.99);
+    expect(c.plan!.confidence, 0.99);
+
+    // A stale failure must not flip a fresh result into an error either.
+    final failing = FakeAnalysisService(
+      slowResult,
+      error: const NetworkException('late failure'),
+      delay: const Duration(milliseconds: 80),
+    );
+    c.service = failing;
+    final third = c.analyze();
+    c.service = fast;
+    final fourth = c.analyze();
+    await Future.wait([third, fourth]);
+    expect(c.state, SessionState.ready);
+    expect(c.error, isNull);
+    expect(c.analysis!.confidence, 0.99);
+  });
+
+  test('history ids are generated locally and never contain the server analysis_id', () async {
+    final tainted = AnalysisResult.fromJson({
+      ...sampleAnalysis().toJson(),
+      'analysis_id': '../../evil',
+    });
+    final c = SessionController(photo: await fakePhoto(), service: FakeAnalysisService(tainted));
+    await c.analyze();
+    final id = c.toHistoryEntry().id;
+    expect(RegExp(r'^session-\d+-[a-z0-9]+$').hasMatch(id), isTrue, reason: id);
+    expect(id.contains('evil'), isFalse);
+    expect(SessionController.newSessionId(), isNot(SessionController.newSessionId()));
   });
 }

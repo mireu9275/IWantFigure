@@ -113,6 +113,8 @@ class HistoryStore extends ChangeNotifier {
   HistoryStore({Directory? directory}) : _rootOverride = directory;
 
   static const _fileName = 'history.json';
+  static const _backupSuffix = '.bak';
+  static const _backupName = '$_fileName$_backupSuffix';
   static const _photoDir = 'photos';
 
   final Directory? _rootOverride;
@@ -135,25 +137,62 @@ class HistoryStore extends ChangeNotifier {
   Future<File> _file() async =>
       File('${(await _rootDir()).path}${Platform.pathSeparator}$_fileName');
 
+  /// Reads the history file. Entries that fail to parse are skipped (with a
+  /// `debugPrint`); when the file itself is not valid JSON it is moved aside
+  /// to `history.json.bak` so nothing is overwritten by the next [add].
   Future<void> load() async {
+    var entries = <HistoryEntry>[];
     try {
       final f = await _file();
       if (await f.exists()) {
-        final decoded = jsonDecode(await f.readAsString());
+        final text = await f.readAsString();
+        dynamic decoded;
+        try {
+          decoded = jsonDecode(text);
+        } on FormatException catch (e) {
+          debugPrint('HistoryStore: history.json is corrupt ($e); keeping it as $_backupName');
+          await _moveAside(f);
+          decoded = null;
+        }
         if (decoded is List) {
-          _entries = decoded
-              .whereType<Map<String, dynamic>>()
-              .map(HistoryEntry.fromJson)
-              .toList()
-            ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          entries = _parseEntries(decoded);
+        } else if (decoded != null) {
+          debugPrint('HistoryStore: unexpected JSON root ${decoded.runtimeType}; keeping it as $_backupName');
+          await _moveAside(f);
         }
       }
     } catch (e) {
       debugPrint('HistoryStore.load failed: $e');
-      _entries = const [];
     }
+    _entries = entries;
     _loaded = true;
     notifyListeners();
+  }
+
+  static List<HistoryEntry> _parseEntries(List<dynamic> list) {
+    final out = <HistoryEntry>[];
+    for (var i = 0; i < list.length; i++) {
+      final item = list[i];
+      if (item is! Map<String, dynamic>) {
+        debugPrint('HistoryStore: skipping entry $i (not an object)');
+        continue;
+      }
+      try {
+        out.add(HistoryEntry.fromJson(item));
+      } catch (e) {
+        debugPrint('HistoryStore: skipping entry $i (${item['id']}): $e');
+      }
+    }
+    out.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return out;
+  }
+
+  Future<void> _moveAside(File f) async {
+    try {
+      await f.rename('${f.path}$_backupSuffix');
+    } catch (e) {
+      debugPrint('HistoryStore: could not move the corrupt file aside: $e');
+    }
   }
 
   /// Copies [photoBytes] into the store and appends [entry] (with its
@@ -164,7 +203,7 @@ class HistoryStore extends ChangeNotifier {
       final dir = Directory(
           '${(await _rootDir()).path}${Platform.pathSeparator}$_photoDir');
       await dir.create(recursive: true);
-      final file = File('${dir.path}${Platform.pathSeparator}${entry.id}.jpg');
+      final file = File('${dir.path}${Platform.pathSeparator}${photoFileName(entry.id)}.jpg');
       await file.writeAsBytes(photoBytes, flush: true);
       stored = entry.copyWith(photoPath: file.path);
     }
@@ -188,10 +227,23 @@ class HistoryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// File-system-safe name for a photo derived from [id]: only
+  /// `[A-Za-z0-9_-]` survive, so an id from outside (or a corrupted one) can
+  /// never escape the photos directory.
+  static String photoFileName(String id) {
+    final cleaned = id.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final trimmed = cleaned.length > 80 ? cleaned.substring(0, 80) : cleaned;
+    return trimmed.isEmpty || trimmed.replaceAll('_', '').isEmpty ? 'photo' : trimmed;
+  }
+
+  /// Writes to a temporary file and renames it over `history.json`, so a
+  /// crash mid-write never leaves a truncated history behind.
   Future<void> _save() async {
     final f = await _file();
-    await f.writeAsString(jsonEncode(_entries.map((e) => e.toJson()).toList()),
+    final tmp = File('${f.path}.tmp');
+    await tmp.writeAsString(jsonEncode(_entries.map((e) => e.toJson()).toList()),
         flush: true);
+    await tmp.rename(f.path);
   }
 }
 

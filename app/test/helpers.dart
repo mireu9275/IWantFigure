@@ -51,12 +51,13 @@ Future<PickedPhoto> fakePhoto() async {
   return PickedPhoto(bytes: bytes, width: 64, height: 48, path: null);
 }
 
-/// An [AnalysisService] that returns [result] immediately (or throws).
+/// An [AnalysisService] that returns [result] (after [delay]) or throws.
 class FakeAnalysisService implements AnalysisService {
-  FakeAnalysisService(this.result, {this.error});
+  FakeAnalysisService(this.result, {this.error, this.delay = Duration.zero});
 
   final AnalysisResult result;
   final Object? error;
+  final Duration delay;
   int calls = 0;
   String? lastLocale;
   AnalyzeHints? lastHints;
@@ -67,8 +68,22 @@ class FakeAnalysisService implements AnalysisService {
     calls++;
     lastLocale = locale;
     lastHints = hints;
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (error != null) throw error!;
     return result;
+  }
+}
+
+/// A history store whose [add] always fails, like a full or read-only disk.
+class ThrowingHistoryStore extends HistoryStore {
+  ThrowingHistoryStore(Directory dir) : super(directory: dir);
+
+  int attempts = 0;
+
+  @override
+  Future<HistoryEntry> add(HistoryEntry entry, {Uint8List? photoBytes}) async {
+    attempts++;
+    throw const FileSystemException('disk full', '/nowhere/history.json');
   }
 }
 
@@ -125,6 +140,22 @@ Future<void> settleRealIO(WidgetTester tester, {int rounds = 30}) async {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
     await tester.pump();
   }
+}
+
+/// Two-finger spread on [finder] that zooms an `InteractiveViewer` in.
+Future<void> pinchZoom(WidgetTester tester, Finder finder) async {
+  final center = tester.getCenter(finder);
+  final a = await tester.startGesture(center - const Offset(15, 0));
+  final b = await tester.startGesture(center + const Offset(15, 0));
+  await tester.pump();
+  for (var i = 0; i < 6; i++) {
+    await a.moveBy(const Offset(-12, 0));
+    await b.moveBy(const Offset(12, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await a.up();
+  await b.up();
+  await tester.pump(const Duration(milliseconds: 50));
 }
 
 /// Phone-sized viewport (432 × 960 logical px).

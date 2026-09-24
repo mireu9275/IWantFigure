@@ -137,4 +137,40 @@ void main() {
     expect(fb!.cy, greaterThan(front[0].y));
     expect(emitted.last.prizeBbox, isNull);
   });
+
+  testWidgets('pinch zoom reports onZoomChanged true, reset reports false', (tester) async {
+    final bytes = (await tester.runAsync(fakePngBytes))!;
+    final plan = const AimEngine().plan(sampleAnalysis());
+    final zoomEvents = <bool>[];
+
+    await tester.pumpWidget(host(PhotoOverlay(
+      imageBytes: bytes,
+      imageWidth: 64,
+      imageHeight: 48,
+      plan: plan,
+      corrections: SceneCorrections.none,
+      editing: false,
+      onCorrectionsChanged: (_) {},
+      onZoomChanged: zoomEvents.add,
+    )));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(zoomEvents, isEmpty);
+
+    await pinchZoom(tester, find.byType(PhotoOverlay));
+    expect(zoomEvents, [true]);
+
+    // Entering edit mode resets the viewer → zoom is reported off.
+    await tester.pumpWidget(host(PhotoOverlay(
+      imageBytes: bytes,
+      imageWidth: 64,
+      imageHeight: 48,
+      plan: plan,
+      corrections: SceneCorrections.none,
+      editing: true,
+      onCorrectionsChanged: (_) {},
+      onZoomChanged: zoomEvents.add,
+    )));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(zoomEvents, [true, false]);
+  });
 }

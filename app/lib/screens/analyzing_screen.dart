@@ -10,6 +10,32 @@ import '../services/api_client.dart';
 import '../services/session_controller.dart';
 import 'result_screen.dart';
 
+/// Localized description of an analysis failure. Server error codes get a
+/// specific hint (`unauthorized` → check the app key, `rate_limited`,
+/// `provider_not_configured`); provider errors (502) show the relayed
+/// provider message.
+String analysisErrorText(S s, Object? e) {
+  switch (e) {
+    case ApiTimeoutException _:
+      return s.errorTimeout;
+    case NetworkException _:
+      return s.errorNetwork;
+    case ApiException(statusCode: 0):
+      return s.errorBadResponse;
+    case ApiException api:
+      if (api.isUnauthorized) return s.errorUnauthorized;
+      if (api.isRateLimited) return s.errorRateLimited;
+      if (api.isProviderNotConfigured) return s.errorProviderNotConfigured;
+      if (api.isProviderError) {
+        return s.errorProvider(api.providerMessage ?? api.message);
+      }
+      final detail = api.providerMessage == null ? api.message : '${api.message} (${api.providerMessage})';
+      return s.errorServer(api.statusCode, detail);
+    default:
+      return '${s.analyzeFailed}: $e';
+  }
+}
+
 /// Runs [SessionController.analyze] and replaces itself with [ResultScreen].
 class AnalyzingScreen extends StatefulWidget {
   const AnalyzingScreen({super.key, required this.controller});
@@ -62,13 +88,6 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
     );
   }
 
-  String _errorText(S s, Object? e) => switch (e) {
-        ApiTimeoutException _ => s.errorTimeout,
-        NetworkException _ => s.errorNetwork,
-        ApiException(statusCode: 0) => s.errorBadResponse,
-        ApiException(:final statusCode, :final message) => s.errorServer(statusCode, message),
-        _ => '${s.analyzeFailed}: $e',
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +123,7 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
                       const SizedBox(height: 8),
                       Text(s.analyzeFailed, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
                       const SizedBox(height: 8),
-                      Text(_errorText(s, c.error), textAlign: TextAlign.center),
+                      Text(analysisErrorText(s, c.error), textAlign: TextAlign.center),
                       const SizedBox(height: 16),
                       FilledButton.icon(
                         onPressed: () => c.analyze(),

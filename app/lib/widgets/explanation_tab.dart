@@ -84,8 +84,8 @@ class ExplanationTab extends StatelessWidget {
         ]),
         _section(context, s.sectionAnalysis, [
           _kv(context, s.provider, [analysis.provider, analysis.model].where((e) => e.isNotEmpty).join(' · ')),
-          if (analysis.latencyMs > 0) _kv(context, 'latency', '${analysis.latencyMs} ms'),
-          if (analysis.analysisId.isNotEmpty) _kv(context, 'id', analysis.analysisId),
+          if (analysis.latencyMs > 0) _kv(context, s.latency, '${analysis.latencyMs} ms'),
+          if (analysis.analysisId.isNotEmpty) _kv(context, s.analysisIdLabel, analysis.analysisId),
         ]),
       ],
     );

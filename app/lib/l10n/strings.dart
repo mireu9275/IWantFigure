@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../engine/inputs.dart';
 import '../models/analysis.dart';
+import '../services/api_client.dart' show AnalyzeApi;
 
 /// Supported UI languages.
 enum AppLocale {
@@ -139,15 +140,39 @@ class S {
         'サーバーに接続できません。ネットワークとサーバーURLを確認してください。',
         'Cannot reach the server. Check the network and the server URL.',
       );
-  String get errorTimeout => _t(
-        '서버 응답이 너무 늦습니다 (30초 초과).',
-        'サーバーの応答がありません（30秒超過）。',
-        'The server did not respond within 30 seconds.',
-      );
+  String get errorTimeout {
+    final sec = AnalyzeApi.defaultTimeout.inSeconds;
+    return _t(
+      '서버 응답이 너무 늦습니다 ($sec초 초과).',
+      'サーバーの応答がありません（$sec秒超過）。',
+      'The server did not respond within $sec seconds.',
+    );
+  }
+
   String errorServer(int status, String message) => _t(
         '서버 오류 ($status): $message',
         'サーバーエラー ($status): $message',
         'Server error ($status): $message',
+      );
+  String get errorUnauthorized => _t(
+        '서버가 앱 키를 거부했습니다. 설정에서 앱 키(X-App-Key)를 확인하세요.',
+        'サーバーがアプリキーを拒否しました。設定でアプリキー (X-App-Key) を確認してください。',
+        'The server rejected the app key. Check the app key (X-App-Key) in Settings.',
+      );
+  String get errorRateLimited => _t(
+        '요청이 너무 많습니다. 잠시 후 다시 시도하세요.',
+        'リクエストが多すぎます。しばらくしてから再試行してください。',
+        'Too many requests. Please try again in a moment.',
+      );
+  String get errorProviderNotConfigured => _t(
+        '서버에 분석 제공자(LLM)가 설정되어 있지 않습니다. 서버 관리자에게 문의하거나 모의 모드를 사용하세요.',
+        'サーバーに解析プロバイダ (LLM) が設定されていません。サーバー管理者に確認するか、モックモードを使ってください。',
+        'The server has no analysis provider (LLM) configured. Contact the server admin or use mock mode.',
+      );
+  String errorProvider(String detail) => _t(
+        '분석 제공자 오류: $detail',
+        '解析プロバイダのエラー: $detail',
+        'Analysis provider error: $detail',
       );
   String get errorBadResponse => _t(
         '서버 응답을 해석할 수 없습니다.',
@@ -186,6 +211,11 @@ class S {
   String get outcomeOpen => _t('진행 중', '進行中', 'Open');
   String get readOnlyBanner => _t('저장된 기록 (읽기 전용)', '保存済みの記録（読み取り専用）', 'Saved record (read-only)');
   String get savedToHistory => _t('기록에 저장했습니다', '履歴に保存しました', 'Saved to history');
+  String saveFailed(String detail) => _t(
+        '기록을 저장하지 못했습니다: $detail',
+        '記録を保存できませんでした: $detail',
+        'Could not save the record: $detail',
+      );
 
   // Explanation tab
   String get sectionSummary => _t('요약', '概要', 'Summary');
@@ -204,6 +234,8 @@ class S {
   String get assistLamp => _t('어시스트 램프', 'アシストランプ', 'Assist lamp');
   String get exitSide => _t('낙하구 방향', '落とし口の位置', 'Exit side');
   String get provider => _t('분석 제공자', '解析プロバイダ', 'Provider');
+  String get latency => _t('응답 시간', '応答時間', 'Latency');
+  String get analysisIdLabel => _t('분석 ID', '解析ID', 'Analysis ID');
   String get llmExplanation => _t('AI 설명', 'AI の説明', 'AI explanation');
   String get expectedMotion => _t('예상 움직임', '予想される動き', 'Expected motion');
   String get disclaimerShort => _t(
@@ -223,6 +255,12 @@ class S {
   String get labelTopFace => _t('윗면', '上面', 'Top face');
   String get labelMotion => _t('예상 이동', '予想の動き', 'Expected motion');
   String get barsEstimated => _t('바 위치 추정됨', 'バー位置は推定', 'Bars estimated');
+
+  // 3D scene labels and controls
+  String get sceneFront => _t('앞 (手前)', '手前', 'Front (手前)');
+  String get resetView => _t('시점 초기화', '視点をリセット', 'Reset view');
+  String get playMotion => _t('예상 움직임 재생', '予想の動きを再生', 'Play motion');
+  String get pauseMotion => _t('예상 움직임 일시정지', '予想の動きを一時停止', 'Pause motion');
 
   // Prize sheet
   String get prizeSheetTitle => _t('경품 정보와 위치', '景品の情報と位置', 'Prize size and position');
@@ -267,15 +305,18 @@ class S {
         'IWantFigure는 크레인게임(クレーンゲーム / UFOキャッチャー) 사진을 분석해 조준 위치를 제안하는 참고용 도구입니다.\n\n'
             '• 추천은 참고용이며 경품 획득을 보장하지 않습니다.\n'
             '• 매장의 촬영·플레이 규정을 반드시 지켜 주세요. 다른 손님이 찍히지 않도록 주의하세요.\n'
-            '• 사진은 분석을 위해서만 서버로 전송되며 원본은 서버에 저장하지 않는 것을 원칙으로 합니다.',
+            '• 사진은 분석을 위해서만 서버로 전송되며 원본은 서버에 저장하지 않는 것을 원칙으로 합니다.\n'
+            '• 기록을 저장하면 사진 사본이 이 기기의 앱 저장 공간에만 보관되며, 기록을 삭제하면 함께 삭제됩니다.',
         'IWantFigureはクレーンゲーム（UFOキャッチャー）の写真を解析し、狙い位置を提案する参考用ツールです。\n\n'
             '• 提案は参考情報であり、景品の獲得を保証するものではありません。\n'
             '• 店舗の撮影・プレイのルールを必ず守ってください。他のお客さんが写らないよう注意してください。\n'
-            '• 写真は解析のためだけにサーバーへ送信され、原本はサーバーに保存しない方針です。',
+            '• 写真は解析のためだけにサーバーへ送信され、原本はサーバーに保存しない方針です。\n'
+            '• 記録を保存すると写真のコピーがこの端末のアプリ領域にのみ保存され、記録を削除すると一緒に削除されます。',
         'IWantFigure analyses a photo of a crane game (クレーンゲーム / UFOキャッチャー) and suggests where to aim. It is a reference tool.\n\n'
             '• Suggestions are for reference only and do not guarantee winning a prize.\n'
             '• Always follow the arcade\'s photo and play rules, and keep other customers out of the frame.\n'
-            '• Photos are sent to the server only for analysis; originals are not meant to be stored there.',
+            '• Photos are sent to the server only for analysis; originals are not meant to be stored there.\n'
+            '• Saving a record keeps a copy of the photo only in this device\'s app storage; deleting the record deletes it too.',
       );
   String get version => _t('버전', 'バージョン', 'Version');
 

@@ -83,6 +83,7 @@ class PhotoOverlay extends StatefulWidget {
     required this.onCorrectionsChanged,
     this.otherObjects = const [],
     this.throttle = const Duration(milliseconds: 60),
+    this.onZoomChanged,
   });
 
   final Uint8List imageBytes;
@@ -98,6 +99,14 @@ class PhotoOverlay extends StatefulWidget {
 
   /// Minimum interval between callbacks while dragging.
   final Duration throttle;
+
+  /// Called with `true` when the viewer is zoomed in (scale > 1) and `false`
+  /// when it returns to the fitted view, so a parent can stop competing
+  /// horizontal gestures (e.g. a `TabBarView` swipe) while panning.
+  final ValueChanged<bool>? onZoomChanged;
+
+  /// Scale above which the view counts as zoomed.
+  static const zoomThreshold = 1.01;
 
   /// Range allowed for the top-face ratio while dragging.
   static const topFaceRange = (0.15, 0.7);
@@ -117,6 +126,16 @@ class _PhotoOverlayState extends State<PhotoOverlay> {
   _WorkingGeometry? _work;
   _WorkingGeometry? _workStart;
   DateTime _lastEmit = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _zoomed = false;
+
+  /// True while the viewer is zoomed in.
+  bool get isZoomed => _zoomed;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewerController.addListener(_onViewerChanged);
+  }
 
   @override
   void didUpdateWidget(PhotoOverlay oldWidget) {
@@ -132,8 +151,16 @@ class _PhotoOverlayState extends State<PhotoOverlay> {
 
   @override
   void dispose() {
+    _viewerController.removeListener(_onViewerChanged);
     _viewerController.dispose();
     super.dispose();
+  }
+
+  void _onViewerChanged() {
+    final zoomed = _viewerController.value.getMaxScaleOnAxis() > PhotoOverlay.zoomThreshold;
+    if (zoomed == _zoomed) return;
+    _zoomed = zoomed;
+    widget.onZoomChanged?.call(zoomed);
   }
 
   /// Geometry currently shown: the live drag state or the plan's overlay.

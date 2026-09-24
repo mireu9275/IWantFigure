@@ -2,10 +2,13 @@
 /// and the observation buttons that drive the next recommendation.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../engine/aim_engine.dart';
 import '../l10n/strings.dart';
+import '../scene3d/scene_painter.dart' show SceneLabels;
 import '../scene3d/scene_view.dart';
 import '../services/history_store.dart';
 import '../services/session_controller.dart';
@@ -30,6 +33,10 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
   late final TabController _tabs;
   bool _editing = false;
 
+  /// True while the photo is zoomed in; horizontal pans then belong to the
+  /// photo, not to the tab swipe.
+  bool _zoomed = false;
+
   SessionController get c => widget.controller;
 
   @override
@@ -52,11 +59,25 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
     final s = S.of(context);
     final result = await _askPlaysAndYen(context, s, outcome);
     if (result == null || !mounted) return;
-    await c.finish(outcome, plays: result.$1, yen: result.$2);
+    try {
+      await c.finish(outcome, plays: result.$1, yen: result.$2);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(s.saveFailed(_describeError(e)))),
+      );
+      return;
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.savedToHistory)));
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
+
+  static String _describeError(Object e) => switch (e) {
+        FileSystemException(:final message, :final osError) =>
+          osError == null ? message : '$message (${osError.message})',
+        _ => e.toString(),
+      };
 
   Future<(int, int)?> _askPlaysAndYen(BuildContext context, S s, SessionOutcome outcome) {
     final plays = TextEditingController(text: '${c.playsFromObservations}');
@@ -143,10 +164,20 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
                     Expanded(
                       child: TabBarView(
                         controller: _tabs,
-                        physics: _editing ? const NeverScrollableScrollPhysics() : null,
+                        physics: _editing || _zoomed ? const NeverScrollableScrollPhysics() : null,
                         children: [
                           _photoTab(context, s, plan, analysis),
-                          SceneView(scene: plan.scene, caption: plan.current?.title),
+                          SceneView(
+                            scene: plan.scene,
+                            caption: plan.current?.title,
+                            labels: SceneLabels(
+                              dropHole: s.labelDropHole,
+                              front: s.sceneFront,
+                              resetView: s.resetView,
+                              playMotion: s.playMotion,
+                              pauseMotion: s.pauseMotion,
+                            ),
+                          ),
                           ExplanationTab(plan: plan, analysis: analysis),
                         ],
                       ),
@@ -177,6 +208,9 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
             editing: _editing,
             onCorrectionsChanged: c.setCorrections,
             otherObjects: others.cast(),
+            onZoomChanged: (z) {
+              if (z != _zoomed && mounted) setState(() => _zoomed = z);
+            },
           ),
         ),
         if (_editing)

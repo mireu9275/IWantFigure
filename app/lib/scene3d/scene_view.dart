@@ -13,18 +13,21 @@ import 'scene_painter.dart';
 ///
 /// The view fills the space its parent gives it (when the height is
 /// unbounded it falls back to a 4:3 box). [caption] and the motion's
-/// description are shown in a translucent card at the bottom.
+/// description are shown in a translucent card at the bottom. [labels]
+/// localizes the in-scene texts and the button tooltips.
 class SceneView extends StatefulWidget {
   const SceneView({
     super.key,
     required this.scene,
     this.animateMotion = true,
     this.caption,
+    this.labels = SceneLabels.defaults,
   });
 
   final Scene3D scene;
   final bool animateMotion;
   final String? caption;
+  final SceneLabels labels;
 
   @override
   State<SceneView> createState() => _SceneViewState();
@@ -200,6 +203,7 @@ class _SceneViewState extends State<SceneView> with SingleTickerProviderStateMix
                           colors: colors,
                           t: motion == null ? 0 : _t.value,
                           textScaler: textScaler,
+                          labels: widget.labels,
                         ),
                       ),
                     ),
@@ -212,14 +216,14 @@ class _SceneViewState extends State<SceneView> with SingleTickerProviderStateMix
                       children: [
                         if (motion != null)
                           IconButton.filledTonal(
-                            tooltip: _animationEnabled ? 'Pause motion' : 'Play motion',
+                            tooltip: _animationEnabled ? widget.labels.pauseMotion : widget.labels.playMotion,
                             visualDensity: VisualDensity.compact,
                             iconSize: 20,
                             onPressed: _toggleAnimation,
                             icon: Icon(_animationEnabled ? Icons.pause : Icons.play_arrow),
                           ),
                         IconButton.filledTonal(
-                          tooltip: 'Reset view',
+                          tooltip: widget.labels.resetView,
                           visualDensity: VisualDensity.compact,
                           iconSize: 20,
                           onPressed: _resetCamera,

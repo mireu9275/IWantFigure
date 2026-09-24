@@ -3,6 +3,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -88,6 +89,10 @@ class SessionController extends ChangeNotifier {
   bool _planScheduled = false;
   bool _disposed = false;
 
+  /// Incremented on every [analyze]; a call whose generation is stale (a
+  /// newer call started, or the controller was disposed) discards its result.
+  int _generation = 0;
+
   String get locale => _locale;
   /// The prize size in effect: the user's choice, or a default matching the
   /// detected prize kind.
@@ -117,9 +122,13 @@ class SessionController extends ChangeNotifier {
       _observations.where((o) => o.kind != ObservationKind.stuck).length;
 
   /// Runs the analysis provider on the photo and computes the first plan.
+  /// When called again while a previous call is in flight, only the newest
+  /// call's result is applied.
   Future<void> analyze() async {
     final svc = service;
     if (svc == null) return;
+    final gen = ++_generation;
+    bool stale() => _disposed || gen != _generation;
     _state = SessionState.analyzing;
     _stage = AnalyzeStage.prepare;
     _error = null;
@@ -128,6 +137,7 @@ class SessionController extends ChangeNotifier {
       // Nothing to do for "prepare" beyond the decode already done by the
       // picker; yield once so the UI can show the stage.
       await Future<void>.delayed(Duration.zero);
+      if (stale()) return;
       _stage = AnalyzeStage.server;
       notifyListeners();
       final result = await svc.analyze(
@@ -140,14 +150,14 @@ class SessionController extends ChangeNotifier {
                   : [_prize!.widthMm, _prize!.depthMm, _prize!.heightMm],
             ),
       );
-      if (_disposed) return;
+      if (stale()) return;
       _stage = AnalyzeStage.aim;
       notifyListeners();
       _analysis = result;
       _recomputePlan();
       _state = SessionState.ready;
     } catch (e) {
-      if (_disposed) return;
+      if (stale()) return;
       _error = e;
       _state = SessionState.error;
     }
@@ -186,28 +196,42 @@ class SessionController extends ChangeNotifier {
   }
 
   /// Records the outcome and, when a [history] store is attached, saves the
-  /// session (copying the photo). Returns the entry that was built.
+  /// session (copying the photo). The outcome is only committed once the save
+  /// succeeded; a failed save rethrows and leaves [isSaved] false. Returns
+  /// the entry that was built.
   Future<HistoryEntry> finish(SessionOutcome outcome, {int? plays, int? yen}) async {
-    _outcome = outcome;
-    _plays = plays ?? playsFromObservations;
-    _yen = yen ?? 0;
-    final entry = toHistoryEntry();
+    final p = plays ?? playsFromObservations;
+    final y = yen ?? 0;
+    final entry = _buildEntry(outcome: outcome, plays: p, yen: y);
     final store = history;
     final stored = store == null ? entry : await store.add(entry, photoBytes: photo.bytes);
+    _outcome = outcome;
+    _plays = p;
+    _yen = y;
     if (!_disposed) notifyListeners();
     return stored;
   }
 
   /// Snapshot of the session as a history record (photo path not yet copied).
-  HistoryEntry toHistoryEntry() {
+  HistoryEntry toHistoryEntry() => _buildEntry(outcome: _outcome, plays: _plays, yen: _yen);
+
+  static final _random = math.Random();
+
+  /// Locally generated, file-system-safe id (never derived from server data).
+  static String newSessionId() =>
+      'session-${DateTime.now().millisecondsSinceEpoch}-${_random.nextInt(1 << 30).toRadixString(36)}';
+
+  HistoryEntry _buildEntry({
+    required SessionOutcome outcome,
+    required int plays,
+    required int yen,
+  }) {
     final a = _analysis;
     if (a == null) {
       throw StateError('No analysis to save');
     }
     return HistoryEntry(
-      id: a.analysisId.isNotEmpty
-          ? '${a.analysisId}-${DateTime.now().millisecondsSinceEpoch}'
-          : 'session-${DateTime.now().millisecondsSinceEpoch}',
+      id: newSessionId(),
       timestamp: DateTime.now(),
       analysis: a,
       photoPath: photo.path ?? '',
@@ -216,9 +240,9 @@ class SessionController extends ChangeNotifier {
       observations: _observations,
       prize: prize,
       corrections: _corrections,
-      outcome: _outcome,
-      plays: _plays,
-      yen: _yen,
+      outcome: outcome,
+      plays: plays,
+      yen: yen,
       locale: _locale,
     );
   }

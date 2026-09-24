@@ -18,6 +18,43 @@ import '../models/analysis.dart';
 import '../models/scene.dart';
 import 'projection.dart';
 
+/// Text shown by the 3D view. Defaults are the Japanese arcade terms and
+/// English control tooltips; the app passes localized values.
+class SceneLabels {
+  const SceneLabels({
+    this.dropHole = ScenePainter.dropHoleLabel,
+    this.front = ScenePainter.frontEdgeLabel,
+    this.resetView = 'Reset view',
+    this.playMotion = 'Play motion',
+    this.pauseMotion = 'Pause motion',
+  });
+
+  static const defaults = SceneLabels();
+
+  /// Label drawn on the drop hole.
+  final String dropHole;
+
+  /// Label drawn at the player's edge of the field.
+  final String front;
+
+  /// Tooltips of the view's buttons.
+  final String resetView;
+  final String playMotion;
+  final String pauseMotion;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SceneLabels &&
+      other.dropHole == dropHole &&
+      other.front == front &&
+      other.resetView == resetView &&
+      other.playMotion == playMotion &&
+      other.pauseMotion == pauseMotion;
+
+  @override
+  int get hashCode => Object.hash(dropHole, front, resetView, playMotion, pauseMotion);
+}
+
 /// Paints a [Scene3D] seen through [camera].
 ///
 /// [t] in `[0, 1]` is the motion animation parameter: the box named by
@@ -30,10 +67,14 @@ class ScenePainter extends CustomPainter {
     required this.colors,
     this.t = 0,
     this.textScaler = TextScaler.noScaling,
+    this.labels = SceneLabels.defaults,
   });
 
   final Scene3D scene;
   final OrbitCamera camera;
+
+  /// Texts drawn in the scene (drop hole, front edge).
+  final SceneLabels labels;
 
   /// Theme colours so the view stays readable in light and dark mode.
   final ColorScheme colors;
@@ -49,10 +90,10 @@ class ScenePainter extends CustomPainter {
   /// Size of the claw unit body drawn above the aim point.
   static const Vec3 clawBodySize = Vec3(120, 120, 80);
 
-  /// Label drawn on the drop hole.
+  /// Default label drawn on the drop hole (see [SceneLabels]).
   static const String dropHoleLabel = '落とし口';
 
-  /// Label drawn at the player's edge of the field.
+  /// Default label drawn at the player's edge of the field (see [SceneLabels]).
   static const String frontEdgeLabel = '手前';
 
   /// Fixed light direction (upper front-left) for flat shading.
@@ -98,7 +139,8 @@ class ScenePainter extends CustomPainter {
       oldDelegate.camera != camera ||
       oldDelegate.t != t ||
       oldDelegate.colors != colors ||
-      oldDelegate.textScaler != textScaler;
+      oldDelegate.textScaler != textScaler ||
+      oldDelegate.labels != labels;
 }
 
 /// A drawable collected for depth sorting.
@@ -121,6 +163,7 @@ class _Renderer {
   Scene3D get scene => painter.scene;
   OrbitCamera get camera => painter.camera;
   ColorScheme get colors => painter.colors;
+  SceneLabels get labels => painter.labels;
 
   final List<_Item> _platform = [];
   final List<_Item> _solids = [];
@@ -242,7 +285,7 @@ class _Renderer {
     if (centre.visible) {
       _drawLabel(
         centre.screen,
-        ScenePainter.dropHoleLabel,
+        labels.dropHole,
         color: _dark ? const Color(0xFFFF8A80) : const Color(0xFFC62828),
         anchor: Alignment.center,
       );
@@ -410,7 +453,7 @@ class _Renderer {
     if (!p.visible) return;
     _drawLabel(
       p.screen + const Offset(0, 4),
-      ScenePainter.frontEdgeLabel,
+      labels.front,
       color: colors.onSurfaceVariant,
       anchor: Alignment.topCenter,
       fontSize: 10,

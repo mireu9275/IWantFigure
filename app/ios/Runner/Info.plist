@@ -29,7 +29,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>クレーンゲームの筐体を撮影して、狙う位置を解析するためにカメラを使用します。(The camera is used to photograph the crane game cabinet so the app can analyse where to aim.)</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>撮影済みのクレーンゲームの写真を選んで解析するためにフォトライブラリにアクセスします。(The photo library is accessed to pick an existing crane game photo for analysis.)</string>
+	<string>撮影済みのクレーンゲームの写真を選んで解析するためにフォトライブラリにアクセスします。記録を保存すると写真のコピーがこの端末内のアプリ領域にのみ保存されます。(The photo library is accessed to pick an existing crane game photo for analysis. Saved records keep a copy of the photo only in this app's local storage.)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
