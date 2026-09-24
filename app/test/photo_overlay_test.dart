@@ -23,7 +23,7 @@ void main() {
     expect(tall.imageRect, const Rect.fromLTWH(0, 150, 100, 100));
   });
 
-  Widget host(Widget child, {bool wide = true}) => MaterialApp(
+  Widget host(Widget child) => MaterialApp(
         home: LocaleScope(
           strings: const S(AppLocale.ko),
           child: Scaffold(
@@ -33,7 +33,7 @@ void main() {
       );
 
   testWidgets('paints without a plan overlay and with one', (tester) async {
-    final bytes = await fakePngBytes();
+    final bytes = (await tester.runAsync(fakePngBytes))!;
     final analysis = sampleAnalysis();
     const engine = AimEngine();
     final plan = engine.plan(analysis);
@@ -58,7 +58,7 @@ void main() {
   });
 
   testWidgets('dragging a corner in edit mode emits a new prize bbox', (tester) async {
-    final bytes = await fakePngBytes();
+    final bytes = (await tester.runAsync(fakePngBytes))!;
     final analysis = sampleAnalysis();
     final plan = const AimEngine().plan(analysis);
     final emitted = <SceneCorrections>[];
@@ -101,7 +101,7 @@ void main() {
   });
 
   testWidgets('dragging the front bar emits a frontBar correction', (tester) async {
-    final bytes = await fakePngBytes();
+    final bytes = (await tester.runAsync(fakePngBytes))!;
     final analysis = sampleAnalysis();
     final plan = const AimEngine().plan(analysis);
     final emitted = <SceneCorrections>[];

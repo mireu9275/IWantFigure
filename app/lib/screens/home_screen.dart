@@ -14,6 +14,8 @@ import 'analyzing_screen.dart';
 import 'result_screen.dart';
 import 'settings_screen.dart';
 
+/// Landing screen: camera / gallery buttons, the shooting guide and the
+/// list of saved sessions (tap to reopen read-only).
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 

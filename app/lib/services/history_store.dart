@@ -23,37 +23,6 @@ enum SessionOutcome {
       );
 }
 
-/// JSON helpers for [SceneCorrections] (the engine model has none).
-class SceneCorrectionsJson {
-  SceneCorrectionsJson._();
-
-  static Map<String, dynamic> toJson(SceneCorrections c) => {
-        'prize_bbox': c.prizeBbox?.toList(),
-        'top_face_ratio': c.topFaceRatio,
-        'front_bar': c.frontBar?.toList(),
-        'back_bar': c.backBar?.toList(),
-        'drop_hole': c.dropHole?.toList(),
-        'claw': c.claw?.toList(),
-        'yaw_deg': c.yawDeg,
-        'box_y_offset_mm': c.boxYOffsetMm,
-      };
-
-  static SceneCorrections fromJson(Map<String, dynamic>? j) {
-    if (j == null) return SceneCorrections.none;
-    NBox? box(dynamic v) => v is List && v.length == 4 ? NBox.fromList(v) : null;
-    double? num_(dynamic v) => v is num ? v.toDouble() : null;
-    return SceneCorrections(
-      prizeBbox: box(j['prize_bbox']),
-      topFaceRatio: num_(j['top_face_ratio']),
-      frontBar: box(j['front_bar']),
-      backBar: box(j['back_bar']),
-      dropHole: box(j['drop_hole']),
-      claw: box(j['claw']),
-      yawDeg: num_(j['yaw_deg']),
-      boxYOffsetMm: num_(j['box_y_offset_mm']),
-    );
-  }
-}
 
 /// One saved session.
 class HistoryEntry {
@@ -98,7 +67,7 @@ class HistoryEntry {
         'image_height': imageHeight,
         'observations': observations.map((o) => o.toJson()).toList(),
         'prize': prize.toJson(),
-        'corrections': SceneCorrectionsJson.toJson(corrections),
+        'corrections': corrections.toJson(),
         'outcome': outcome.name,
         'plays': plays,
         'yen': yen,
@@ -121,7 +90,7 @@ class HistoryEntry {
         prize: j['prize'] is Map<String, dynamic>
             ? PrizeSpec.fromJson(j['prize'] as Map<String, dynamic>)
             : PrizeSpec.defaultFigureBox,
-        corrections: SceneCorrectionsJson.fromJson(
+        corrections: SceneCorrections.fromJson(
             j['corrections'] as Map<String, dynamic>?),
         outcome: SessionOutcome.fromName(j['outcome'] as String?),
         plays: (j['plays'] as num?)?.toInt() ?? 0,
@@ -179,8 +148,8 @@ class HistoryStore extends ChangeNotifier {
             ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
         }
       }
-    } catch (e, st) {
-      debugPrint('HistoryStore.load failed: $e\n$st');
+    } catch (e) {
+      debugPrint('HistoryStore.load failed: $e');
       _entries = const [];
     }
     _loaded = true;

@@ -172,6 +172,8 @@ class SceneCorrections {
       yawDeg == null &&
       boxYOffsetMm == null;
 
+  /// Returns a copy with the given fields replaced. Fields listed in
+  /// [clear] are reset to `null` ("use the detected value again").
   SceneCorrections copyWith({
     NBox? prizeBbox,
     double? topFaceRatio,
@@ -181,17 +183,45 @@ class SceneCorrections {
     NBox? claw,
     double? yawDeg,
     double? boxYOffsetMm,
+    Set<String> clear = const {},
   }) =>
       SceneCorrections(
-        prizeBbox: prizeBbox ?? this.prizeBbox,
-        topFaceRatio: topFaceRatio ?? this.topFaceRatio,
-        frontBar: frontBar ?? this.frontBar,
-        backBar: backBar ?? this.backBar,
-        dropHole: dropHole ?? this.dropHole,
-        claw: claw ?? this.claw,
-        yawDeg: yawDeg ?? this.yawDeg,
-        boxYOffsetMm: boxYOffsetMm ?? this.boxYOffsetMm,
+        prizeBbox: clear.contains('prizeBbox') ? null : prizeBbox ?? this.prizeBbox,
+        topFaceRatio: clear.contains('topFaceRatio') ? null : topFaceRatio ?? this.topFaceRatio,
+        frontBar: clear.contains('frontBar') ? null : frontBar ?? this.frontBar,
+        backBar: clear.contains('backBar') ? null : backBar ?? this.backBar,
+        dropHole: clear.contains('dropHole') ? null : dropHole ?? this.dropHole,
+        claw: clear.contains('claw') ? null : claw ?? this.claw,
+        yawDeg: clear.contains('yawDeg') ? null : yawDeg ?? this.yawDeg,
+        boxYOffsetMm: clear.contains('boxYOffsetMm') ? null : boxYOffsetMm ?? this.boxYOffsetMm,
       );
+
+  Map<String, dynamic> toJson() => {
+        'prize_bbox': prizeBbox?.toList(),
+        'top_face_ratio': topFaceRatio,
+        'front_bar': frontBar?.toList(),
+        'back_bar': backBar?.toList(),
+        'drop_hole': dropHole?.toList(),
+        'claw': claw?.toList(),
+        'yaw_deg': yawDeg,
+        'box_y_offset_mm': boxYOffsetMm,
+      };
+
+  factory SceneCorrections.fromJson(Map<String, dynamic>? j) {
+    if (j == null) return SceneCorrections.none;
+    NBox? box(dynamic v) => v is List && v.length == 4 ? NBox.fromList(v) : null;
+    double? number(dynamic v) => v is num ? v.toDouble() : null;
+    return SceneCorrections(
+      prizeBbox: box(j['prize_bbox']),
+      topFaceRatio: number(j['top_face_ratio']),
+      frontBar: box(j['front_bar']),
+      backBar: box(j['back_bar']),
+      dropHole: box(j['drop_hole']),
+      claw: box(j['claw']),
+      yawDeg: number(j['yaw_deg']),
+      boxYOffsetMm: number(j['box_y_offset_mm']),
+    );
+  }
 }
 
 /// Tunable heuristics of the engine. Defaults encode the community rules of

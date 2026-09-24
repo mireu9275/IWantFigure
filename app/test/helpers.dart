@@ -117,6 +117,23 @@ Widget testApp({
 /// Localized strings for [code] without a widget tree.
 S stringsFor(String code) => S(AppLocale.fromCode(code));
 
+/// Lets real asynchronous IO started from the widget tree (file writes,
+/// image decoding) make progress: the automated binding only flushes the
+/// fake-async microtask queue around `runAsync`, so each IO hop needs a round.
+Future<void> settleRealIO(WidgetTester tester, {int rounds = 30}) async {
+  for (var i = 0; i < rounds; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+    await tester.pump();
+  }
+}
+
+/// Phone-sized viewport (432 × 960 logical px).
+void usePhoneViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1080, 2400);
+  tester.view.devicePixelRatio = 2.5;
+  addTearDown(tester.view.reset);
+}
+
 /// A throw-away history directory for a test.
 Directory tempHistoryDir(String tag) =>
     Directory.systemTemp.createTempSync('iwf_history_$tag');

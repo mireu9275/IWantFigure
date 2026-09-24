@@ -7,6 +7,8 @@ import '../app/app_scope.dart';
 import '../l10n/strings.dart';
 import '../services/settings.dart';
 
+/// Edits the [SettingsStore]: mock mode, server URL/key, language, default
+/// prize preset, guide visibility, plus the about/disclaimer block.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 

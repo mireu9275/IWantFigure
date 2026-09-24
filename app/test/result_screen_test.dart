@@ -26,16 +26,14 @@ void main() {
   }
 
   testWidgets('ResultScreen shows the current step and advances on an observation', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2200);
-    tester.view.devicePixelRatio = 2.5;
-    addTearDown(tester.view.reset);
+    usePhoneViewport(tester);
 
     final settings = await loadedSettings();
     final dir = tempHistoryDir('result');
     addTearDown(() => dir.deleteSync(recursive: true));
     final history = HistoryStore(directory: dir);
-    await history.load();
-    final c = await readyController(history: history);
+    await tester.runAsync(history.load);
+    final c = (await tester.runAsync(() => readyController(history: history)))!;
     final s = stringsFor('ko');
     final total = c.plan!.steps.length;
     final first = c.plan!.currentStepIndex + 1;
@@ -69,16 +67,14 @@ void main() {
   });
 
   testWidgets('dropped observation shows the finished banner; done saves to history', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2200);
-    tester.view.devicePixelRatio = 2.5;
-    addTearDown(tester.view.reset);
+    usePhoneViewport(tester);
 
     final settings = await loadedSettings();
     final dir = tempHistoryDir('finish');
     addTearDown(() => dir.deleteSync(recursive: true));
     final history = HistoryStore(directory: dir);
-    await history.load();
-    final c = await readyController(history: history);
+    await tester.runAsync(history.load);
+    final c = (await tester.runAsync(() => readyController(history: history)))!;
     final s = stringsFor('ko');
 
     await tester.pumpWidget(testApp(
@@ -98,7 +94,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text(s.playsCount), findsOneWidget);
     await tester.tap(find.text(s.save));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    // Saving copies the photo to disk: let real IO finish.
+    await settleRealIO(tester);
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(history.entries.length, 1);
@@ -108,16 +106,14 @@ void main() {
   });
 
   testWidgets('tabs switch to 3D and explanation without settling', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2200);
-    tester.view.devicePixelRatio = 2.5;
-    addTearDown(tester.view.reset);
+    usePhoneViewport(tester);
 
     final settings = await loadedSettings();
     final dir = tempHistoryDir('tabs');
     addTearDown(() => dir.deleteSync(recursive: true));
     final history = HistoryStore(directory: dir);
-    await history.load();
-    final c = await readyController();
+    await tester.runAsync(history.load);
+    final c = (await tester.runAsync(readyController))!;
     final s = stringsFor('ko');
 
     await tester.pumpWidget(testApp(
@@ -127,18 +123,31 @@ void main() {
     ));
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.text(s.tab3d));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text(s.tabExplain));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text(s.sectionRationale), findsOneWidget);
-    expect(find.text(s.sectionSteps), findsOneWidget);
-    expect(find.text(s.sectionMachine), findsOneWidget);
+    Future<void> switchTab(String label) async {
+      await tester.tap(find.text(label));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await switchTab(s.tab3d);
+    // The (stub or real) SceneView shows the current step as its caption.
+    expect(find.text(c.plan!.current!.title), findsWidgets);
+
+    await switchTab(s.tabExplain);
+    expect(find.text(s.sectionSummary), findsOneWidget);
+    for (final section in [s.sectionRationale, s.sectionSteps, s.sectionAbort, s.sectionMachine]) {
+      await tester.dragUntilVisible(
+        find.text(section),
+        find.byType(ListView),
+        const Offset(0, -250),
+      );
+      expect(find.text(section), findsOneWidget);
+    }
 
     // Correction toggle only exists on the photo tab.
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
-    await tester.tap(find.text(s.tabPhoto));
-    await tester.pump(const Duration(milliseconds: 400));
+    await switchTab(s.tabPhoto);
     expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pump(const Duration(milliseconds: 100));
@@ -146,16 +155,14 @@ void main() {
   });
 
   testWidgets('read-only session from history hides observation buttons', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2200);
-    tester.view.devicePixelRatio = 2.5;
-    addTearDown(tester.view.reset);
+    usePhoneViewport(tester);
 
     final settings = await loadedSettings();
     final dir = tempHistoryDir('readonly');
     addTearDown(() => dir.deleteSync(recursive: true));
     final history = HistoryStore(directory: dir);
-    await history.load();
-    final photo = await fakePhoto();
+    await tester.runAsync(history.load);
+    final photo = (await tester.runAsync(fakePhoto))!;
     final entry = HistoryEntry(
       id: 'e1',
       timestamp: DateTime(2026, 9, 24),

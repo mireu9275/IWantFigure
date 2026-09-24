@@ -11,11 +11,12 @@ void main() {
 
   for (final code in ['ko', 'ja', 'en']) {
     testWidgets('HomeScreen renders the main buttons in $code', (tester) async {
+      usePhoneViewport(tester);
       final settings = await loadedSettings(initial: {'locale': code});
       final dir = tempHistoryDir(code);
       addTearDown(() => dir.deleteSync(recursive: true));
       final history = HistoryStore(directory: dir);
-      await history.load();
+      await tester.runAsync(history.load);
       final s = stringsFor(code);
 
       await tester.pumpWidget(testApp(settings: settings, history: history));
@@ -25,11 +26,16 @@ void main() {
       expect(find.text(s.pickFromGallery), findsOneWidget);
       expect(find.text(s.shootingGuideTitle), findsOneWidget);
       expect(find.text(s.mockModeChip), findsOneWidget);
-      expect(find.text(s.historyEmpty), findsOneWidget);
       // Each guide bullet is rendered.
       for (final item in s.shootingGuideItems) {
         expect(find.text(item), findsOneWidget);
       }
+      await tester.dragUntilVisible(
+        find.text(s.historyEmpty),
+        find.byType(ListView),
+        const Offset(0, -200),
+      );
+      expect(find.text(s.historyEmpty), findsOneWidget);
       expect(find.byType(HomeScreen), findsOneWidget);
     });
   }
@@ -39,7 +45,7 @@ void main() {
     final dir = tempHistoryDir('guide');
     addTearDown(() => dir.deleteSync(recursive: true));
     final history = HistoryStore(directory: dir);
-    await history.load();
+    await tester.runAsync(history.load);
     final s = stringsFor('ko');
 
     await tester.pumpWidget(testApp(settings: settings, history: history));
@@ -56,7 +62,7 @@ void main() {
     final dir = tempHistoryDir('settings');
     addTearDown(() => dir.deleteSync(recursive: true));
     final history = HistoryStore(directory: dir);
-    await history.load();
+    await tester.runAsync(history.load);
 
     await tester.pumpWidget(testApp(settings: settings, history: history));
     await tester.pump();
@@ -79,7 +85,7 @@ void main() {
     final dir = tempHistoryDir('cancel');
     addTearDown(() => dir.deleteSync(recursive: true));
     final history = HistoryStore(directory: dir);
-    await history.load();
+    await tester.runAsync(history.load);
     final s = stringsFor('ko');
 
     await tester.pumpWidget(testApp(settings: settings, history: history));
