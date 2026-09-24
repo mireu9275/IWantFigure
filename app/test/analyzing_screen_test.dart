@@ -28,11 +28,16 @@ void main() {
     expect(find.text(s.stageServer), findsOneWidget);
     await tester.pump(); // post-frame: analyze() starts
     await tester.pump(); // microtasks of the fake service
-    await tester.pump(const Duration(milliseconds: 400)); // route transition
+    await tester.pump(const Duration(milliseconds: 400)); // zero-delay timer + navigation
+    await tester.pump(const Duration(milliseconds: 400)); // new route leaves its first offstage frame
 
     expect(svc.calls, 1);
     expect(c.state, SessionState.ready);
     expect(find.byType(ResultScreen), findsOneWidget);
+
+    // pushReplacement disposes the old route once the page transition ends.
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
     expect(find.byType(AnalyzingScreen), findsNothing);
   });
 
@@ -79,7 +84,8 @@ void main() {
     await tester.tap(find.text(s.switchToMock));
     await tester.pump();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400)); // zero-delay timer + navigation
+    await tester.pump(const Duration(milliseconds: 400)); // new route leaves its first offstage frame
     expect(good.calls, 1);
     expect(identical(c.service, good), isTrue);
     expect(find.byType(ResultScreen), findsOneWidget);

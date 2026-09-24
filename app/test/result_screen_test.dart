@@ -207,9 +207,12 @@ void main() {
 
     // Control: without zoom a swipe on the photo switches tabs.
     expect(tabs.index, 0);
-    await tester.drag(find.byType(PhotoOverlay), const Offset(-300, 0));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 400));
+    await tester.fling(find.byType(PhotoOverlay), const Offset(-400, 0), 3000);
+    // The page spring settles slowly and the index updates on scroll end;
+    // pump fixed durations (tab 2 hosts the endlessly animating SceneView).
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 400));
+    }
     expect(tabs.index, 1);
 
     await tester.tap(find.text(s.tabPhoto));
@@ -218,13 +221,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(tabs.index, 0);
 
-    // Zoom in, then swipe: the tab must stay put.
+    // Zoom in, then swipe: the tab must stay put (the pan moves the photo).
     await pinchZoom(tester, find.byType(PhotoOverlay));
     expect(tester.widget<TabBarView>(find.byType(TabBarView)).physics, isA<NeverScrollableScrollPhysics>());
-    await tester.drag(find.byType(PhotoOverlay), const Offset(-300, 0));
+    await tester.fling(find.byType(PhotoOverlay), const Offset(-300, 0), 1500);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
     expect(tabs.index, 0);
+    expect(tabs.offset, 0);
+    await tester.drag(find.byType(PhotoOverlay), const Offset(-120, 0));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tabs.index, 0);
+    expect(tabs.offset, 0);
     expect(tester.takeException(), isNull);
   });
 
@@ -271,7 +279,9 @@ void main() {
     });
     final photo = (await tester.runAsync(fakePhoto))!;
     final c = SessionController(photo: photo, service: FakeAnalysisService(withMeta), locale: 'en');
-    await c.analyze();
+    // analyze() awaits a zero-delay timer: run it outside the fake-async zone.
+    await tester.runAsync(c.analyze);
+    expect(c.state, SessionState.ready);
     final s = stringsFor('en');
 
     await tester.pumpWidget(testApp(settings: settings, history: history, home: ResultScreen(controller: c)));

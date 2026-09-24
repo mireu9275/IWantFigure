@@ -66,11 +66,13 @@ IWantFigure/
 | `lib/models/scene.dart` | `Scene3D`와 구성요소(`SceneBox`, `SceneCylinder`, `SceneClaw`, `SceneMarker`, `SceneMotion`), `Vec3`/`Pose`/`Rotation` | 필드 좌표계 mm |
 | `lib/engine/` | `AimEngine`(룰 엔진), `inputs.dart`(PrizeSpec, Observation, SceneCorrections, EngineOptions), `aim_plan.dart`(AimPlan, AimStep, OverlayGeometry) | 순수 Dart, `flutter test`로 검증 |
 | `lib/scene3d/` | 소프트웨어 3D 렌더러(`OrbitCamera`, `ScenePainter`, `SceneView`) | 외부 패키지 없음 |
-| `lib/services/` | 설정, API 클라이언트, 모크 API, 이미지 준비, 히스토리, 세션 컨트롤러 | |
-| `lib/screens/`, `lib/widgets/` | 홈 → 분석 중 → 결과(사진/3D/설명) → 설정, `PhotoOverlay` | |
-| `lib/l10n/strings.dart` | ko/ja/en 문자열 | 사용자 노출 문자열은 전부 여기 |
+| `lib/services/` | `SettingsStore`(SharedPreferences), `AnalyzeApi`/`MockAnalyzeApi`, `PhotoPicker`(image_picker), `HistoryStore`(문서 폴더 JSON + 사진 복사, 원자적 저장), `SessionController`(분석·보정·관찰·플랜 재계산) | |
+| `lib/app/` | `IWantFigureApp`, `AppScope`(설정·히스토리·서비스 주입) | |
+| `lib/screens/` | `HomeScreen` → `AnalyzingScreen` → `ResultScreen`(사진/3D/설명 탭) , `SettingsScreen` | |
+| `lib/widgets/` | `PhotoOverlay`(오버레이·보정 핸들·줌), `CurrentStepCard`, `ObservationBar`, `PrizeSheet`, `ExplanationTab`, `ArmBadge` | |
+| `lib/l10n/strings.dart` | ko/ja/en 문자열(`S.of(context)`) | 사용자 노출 문자열은 전부 여기 |
 | `assets/samples/` | 모크용 샘플 응답 | `shared/samples`의 복사본 |
-| `test/` | 엔진·3D·UI·서비스 테스트 | |
+| `test/` | 엔진 15, 3D 16, UI·서비스 51 = 82건 | `flutter test` |
 
 ### 3.2 좌표계 두 가지
 
@@ -107,7 +109,10 @@ flutter run            # 기기/에뮬레이터. 기본은 모크 모드
 
 ## 4. 서버 (`server/`)
 
-- ASP.NET Core minimal API, .NET 10. 엔드포인트: `GET /healthz`, `POST /api/v1/analyze`.
+- ASP.NET Core minimal API, .NET 10. 엔드포인트: `GET /healthz`, `POST /api/v1/analyze`. xUnit 테스트 113건(`dotnet test`).
+- 구조: `Endpoints/`(라우팅·`X-App-Key` 필터), `Imaging/ImagePipeline.cs`, `Providers/`(Mock·Gemini·Claude, 프롬프트 빌더, 스키마 변환), `Analysis/`(정규화·스키마 검증·재시도 오케스트레이션), `Configuration/Options.cs`.
+- 오류 응답: `{"error": <code>, "message": <상세>}`(4xx), `{"error": "provider_error", "provider_message": <일반화 문구>}`(502), 503 `provider_not_configured`, 429 시 `Retry-After: 60`.
+- 운영 옵션: `Server:AppKey`, `Server:UseForwardedHeaders` + `Server:KnownProxies`/`KnownNetworks`(프록시 뒤 IP별 레이트리밋), `Analysis:MaxImagePixels`(JPEG 50MP)/`MaxImagePixelsNonJpeg`(16MP)/`MaxConcurrentDecodes`(4), `Claude:MaxTokens`(8192)/`Effort`(low)/`Thinking`(adaptive; haiku 계열은 자동 생략).
 - 프로바이더: `mock`(기본) / `gemini` / `claude`. 환경변수 예:
 
 ```bash
@@ -122,7 +127,11 @@ dotnet run --project IWantFigure.Server
 - 보안: API 키는 서버에만. 앱→서버는 `X-App-Key`(선택)로 보호. 사진은 저장하지 않는다(학습용 수집은 별도 옵트인으로 설계할 것).
 - 자세한 실행·배포는 `server/README.md`.
 
-## 5. 남은 일 (우선순위)
+## 5. 검증 이력
+
+- 2026-09-24: 엔진/3D, 앱 UI, 서버 각각 별도 리뷰(재현 기반)를 거쳐 결함을 수정했다. 주요 항목: 3D 회전 방향과 사용자 회전 보정 유지, 링·인형 표적의 앞뒤 반전, 퇴화 bbox의 NaN, 히스토리 파일 손상 시 전체 소실, 저장 실패 처리, 중복 분석 요청 경합, 줌 상태에서 탭 스와이프 충돌, 서버 오류 메시지 전달, 프록시 뒤 레이트리밋, 힌트 입력 상한, 비JPEG 디코드 메모리, Claude max_tokens 기본값.
+
+## 6. 남은 일 (우선순위)
 
 1. **실기 검증**: 실제 게임센터 사진 20~50장으로 유형 분류·객체 박스 품질을 Gemini/Claude 각각 측정하고, 룰 엔진의 `inset`/`side`/윗면 비율 기본값을 튜닝.
 2. **얼굴 블러**: 업로드 전 온디바이스 얼굴 검출·블러(ML Kit / Vision) — 개인정보(APPI) 대응 필수. MVP 코드에는 촬영 가이드 문구만 있음.

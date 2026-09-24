@@ -49,6 +49,7 @@ class CurrentStepCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   s.currentStep,
@@ -59,15 +60,26 @@ class CurrentStepCard extends StatelessWidget {
                   s.stepOf(step.index, plan.steps.length),
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
-                const Spacer(),
-                ArmBadge(arm: step.arm, compact: dense),
-                const SizedBox(width: 6),
-                Chip(
-                  label: Text(s.techniqueLabel(step.technique)),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  labelStyle: const TextStyle(fontSize: 11),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                const SizedBox(width: 8),
+                // Badges flow to a second line when the labels are long
+                // (English / Japanese technique names).
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      ArmBadge(arm: step.arm, compact: dense),
+                      Chip(
+                        label: Text(s.techniqueLabel(step.technique), overflow: TextOverflow.ellipsis),
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        labelStyle: const TextStyle(fontSize: 11),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
