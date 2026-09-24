@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Iwantfigure</string>
+	<string>IWantFigure</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>iwantfigure</string>
+	<string>IWantFigure</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>クレーンゲームの筐体を撮影して、狙う位置を解析するためにカメラを使用します。(The camera is used to photograph the crane game cabinet so the app can analyse where to aim.)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>撮影済みのクレーンゲームの写真を選んで解析するためにフォトライブラリにアクセスします。(The photo library is accessed to pick an existing crane game photo for analysis.)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,0 +1,73 @@
+/// Root widget: theme, locale scope and the home route.
+library;
+
+import 'package:flutter/material.dart';
+
+import '../l10n/strings.dart';
+import '../screens/home_screen.dart';
+import '../services/api_client.dart';
+import '../services/history_store.dart';
+import '../services/image_prep.dart';
+import '../services/settings.dart';
+import 'app_scope.dart';
+
+/// The IWantFigure application shell.
+class IWantFigureApp extends StatelessWidget {
+  const IWantFigureApp({
+    super.key,
+    required this.settings,
+    required this.history,
+    this.picker,
+    this.serviceOverride,
+    this.home,
+  });
+
+  final SettingsStore settings;
+  final HistoryStore history;
+
+  /// Photo picker; a default one is created when null.
+  final PhotoPicker? picker;
+  final AnalysisService? serviceOverride;
+
+  /// Overrides the home route (tests).
+  final Widget? home;
+
+  static const seedColor = Color(0xFFE64A5F);
+
+  @override
+  Widget build(BuildContext context) {
+    final picker = this.picker ?? PhotoPicker();
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) {
+        final strings = settings.strings;
+        return AppScope(
+          settings: settings,
+          history: history,
+          picker: picker,
+          serviceOverride: serviceOverride,
+          child: LocaleScope(
+            strings: strings,
+            child: MaterialApp(
+              title: strings.appName,
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(seedColor: seedColor),
+                useMaterial3: true,
+              ),
+              darkTheme: ThemeData(
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: seedColor,
+                  brightness: Brightness.dark,
+                ),
+                useMaterial3: true,
+              ),
+              themeMode: ThemeMode.system,
+              home: home ?? const HomeScreen(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

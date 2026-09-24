@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MainApp());
-}
+import 'app/app.dart';
+import 'services/history_store.dart';
+import 'services/settings.dart';
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(body: Center(child: Text('Hello World!'))),
-    );
-  }
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final settings = SettingsStore();
+  await settings.load();
+  final history = HistoryStore();
+  await history.load();
+  runApp(IWantFigureApp(settings: settings, history: history));
 }
