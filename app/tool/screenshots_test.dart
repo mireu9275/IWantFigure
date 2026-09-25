@@ -5,8 +5,12 @@
 //
 //   flutter test tool/screenshots_test.dart
 //
-// Fonts: Roboto + Material icons from the Flutter SDK cache, Noto Sans KR for
-// Korean/Japanese (path via IWF_NOTO_FONT, default scratch location).
+// Fonts: Roboto + Material icons from the Flutter SDK cache, Noto Sans KR/JP
+// for Korean/Japanese. The Noto path comes from IWF_NOTO_FONT when set,
+// otherwise tool/fonts/NotoSansKR.ttf (relative to app/, gitignored). The JP
+// font is looked up next to it by replacing "NotoSansKR" with "NotoSansJP" in
+// the path, so keep both files in the same folder with matching names.
+// Missing fonts are skipped silently (Korean/Japanese then render as boxes).
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -32,8 +36,7 @@ import '../test/helpers.dart';
 
 final _outDir = Directory('../docs/images');
 final _flutterRoot = Platform.environment['FLUTTER_ROOT'] ?? '/opt/flutter-sdk/flutter';
-final _notoPath = Platform.environment['IWF_NOTO_FONT'] ??
-    '/tmp/claude-0/-home-user-IWantFigure/0608cf0f-fb82-5e83-84ec-81b5f8d9eaa2/scratchpad/fonts/NotoSansKR.ttf';
+final _notoPath = Platform.environment['IWF_NOTO_FONT'] ?? 'tool/fonts/NotoSansKR.ttf';
 
 Future<void> _loadFonts() async {
   final cache = '$_flutterRoot/bin/cache/artifacts/material_fonts';

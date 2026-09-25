@@ -21,3 +21,6 @@ server/**/bin/
 server/**/obj/
 server/**/*.user
 server/.vs/
+
+# Screenshot tool fonts (local copies for app/tool/screenshots_test.dart, not committed)
+app/tool/fonts/
