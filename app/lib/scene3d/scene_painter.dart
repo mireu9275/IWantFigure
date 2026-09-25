@@ -187,6 +187,9 @@ class _Renderer {
     for (final cylinder in scene.cylinders) {
       _addCylinder(cylinder);
     }
+    for (final sphere in scene.spheres) {
+      _addSphere(sphere);
+    }
     final claw = scene.claw;
     if (claw != null) _addClaw(claw);
 
@@ -368,6 +371,46 @@ class _Renderer {
     }
   }
 
+  /// A ball is a shaded disc: its outline is a circle from every direction,
+  /// so it only needs the projected centre and radius.
+  void _addSphere(SceneSphere sphere) {
+    final view = camera.toView(sphere.center);
+    if (view.z < OrbitCamera.nearMm + sphere.radius) return;
+    final centre = camera.viewToScreen(view, size);
+    final r = sphere.radius * camera.pixelsPerMm(view.z, size);
+    if (!r.isFinite || r <= 0) return;
+    final base = painter._materialColor(sphere.material);
+    // Highlight toward the light (upper left on screen for the default light).
+    final light = camera.toView(sphere.center + ScenePainter.lightDir * sphere.radius);
+    final lightScreen = camera.viewToScreen(light, size);
+    final focal = Alignment(
+      ((lightScreen.dx - centre.dx) / r).clamp(-0.8, 0.8),
+      ((lightScreen.dy - centre.dy) / r).clamp(-0.8, 0.8),
+    );
+    final rect = Rect.fromCircle(center: centre, radius: r);
+    final fill = Paint()
+      ..shader = RadialGradient(
+        center: focal,
+        radius: 1.1,
+        colors: [
+          Color.lerp(base, Colors.white, 0.35)!,
+          base,
+          _darken(base, 0.4),
+        ],
+        stops: const [0, 0.55, 1],
+      ).createShader(rect)
+      ..isAntiAlias = true;
+    final edge = Paint()
+      ..color = _darken(base, 0.45)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..isAntiAlias = true;
+    _solids.add(_Item(view.z, (c) {
+      c.drawCircle(centre, r, fill);
+      c.drawCircle(centre, r, edge);
+    }));
+  }
+
   void _addClaw(SceneClaw claw) {
     final c = claw.center;
     final body = SceneBox(
@@ -388,9 +431,11 @@ class _Renderer {
     final bodyBottom = Vec3(c.x, c.y, claw.restHeightMm - ScenePainter.clawBodySize.z / 2);
     final radius = claw.openWidthMm / 2;
     final pivot = Vec3(c.x, c.y, c.z + math.max(60.0, radius * 1.1));
-    final rodBottom = c.z < bodyBottom.z ? c : Vec3(c.x, c.y, bodyBottom.z - 1);
+    // The rod ends at the hub: only the arms reach down to the aim point,
+    // so a lowered claw does not look as if it pierced the prize.
+    final rodBottom = pivot.z < bodyBottom.z ? pivot : Vec3(c.x, c.y, bodyBottom.z - 1);
 
-    // Thin vertical rod from the body down to the aim point.
+    // Thin vertical rod from the body down to the hub.
     _addSegment(bodyBottom, rodBottom, ScenePainter._clawArm, widthMm: 8, into: _solids);
     // Hub where the arms are hinged.
     _addSegment(pivot, Vec3(c.x, c.y, pivot.z - 12), ScenePainter._clawArm, widthMm: 22, into: _solids);

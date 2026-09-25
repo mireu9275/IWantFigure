@@ -187,6 +187,21 @@ class SceneCylinder {
   final String label;
 }
 
+/// A ball (takoyaki ball, round plush...).
+class SceneSphere {
+  const SceneSphere({
+    required this.id,
+    required this.center,
+    required this.radius,
+    this.material = SceneMaterial.plush,
+  });
+
+  final String id;
+  final Vec3 center;
+  final double radius;
+  final SceneMaterial material;
+}
+
 /// Rectangle on the floor (z = 0) where the prize falls to win.
 class SceneDropHole {
   const SceneDropHole({
@@ -277,6 +292,7 @@ class Scene3D {
     this.fieldDepthMm = 500,
     this.cylinders = const [],
     this.boxes = const [],
+    this.spheres = const [],
     this.claw,
     this.dropHole,
     this.markers = const [],
@@ -288,6 +304,7 @@ class Scene3D {
   final double fieldDepthMm;
   final List<SceneCylinder> cylinders;
   final List<SceneBox> boxes;
+  final List<SceneSphere> spheres;
   final SceneClaw? claw;
   final SceneDropHole? dropHole;
   final List<SceneMarker> markers;
@@ -304,6 +321,7 @@ class Scene3D {
   Scene3D copyWith({
     List<SceneCylinder>? cylinders,
     List<SceneBox>? boxes,
+    List<SceneSphere>? spheres,
     SceneClaw? claw,
     SceneDropHole? dropHole,
     List<SceneMarker>? markers,
@@ -315,6 +333,7 @@ class Scene3D {
         fieldDepthMm: fieldDepthMm,
         cylinders: cylinders ?? this.cylinders,
         boxes: boxes ?? this.boxes,
+        spheres: spheres ?? this.spheres,
         claw: claw ?? this.claw,
         dropHole: dropHole ?? this.dropHole,
         markers: markers ?? this.markers,

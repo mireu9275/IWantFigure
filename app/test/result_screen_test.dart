@@ -470,6 +470,8 @@ void main() {
     await pumpTransition(tester);
     expect(find.byType(GuideDetailScreen), findsOneWidget);
     expect(tester.widget<GuideDetailScreen>(find.byType(GuideDetailScreen)).type, type);
+    // The motion demo sits above the text, so scroll down to the steps.
+    await tester.dragUntilVisible(find.text(s.guideHowTo), find.byType(CustomScrollView), const Offset(0, -250));
     expect(find.text(s.guideHowTo), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

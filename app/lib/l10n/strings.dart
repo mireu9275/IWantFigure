@@ -341,6 +341,23 @@ class S {
         '★ marks community reference figures; they vary widely by store, prize and setting.',
       );
 
+  // Guide motion demo (움직임으로 보기)
+  String get guideDemoTitle => _t('움직임으로 보기', '動きで見る', 'See it move');
+  String get guideDemoHint => _t(
+        '드래그해서 돌려 볼 수 있어요. 아래 단계를 누르면 그 장면으로 이동합니다.',
+        'ドラッグで回転できます。下の手順をタップするとその場面へ移動します。',
+        'Drag to turn the view. Tap a step below to jump to that moment.',
+      );
+  String get guideDemoNote => _t(
+        '이해를 돕기 위한 예시 움직임입니다. 실제 움직임은 기계 설정과 경품 무게에 따라 달라집니다.',
+        '理解のための動きの例です。実際の動きは機械の設定や景品の重さで変わります。',
+        'An illustrative example. Real movement depends on the machine settings and the prize weight.',
+      );
+  String get guideDemoPlay => _t('재생', '再生', 'Play');
+  String get guideDemoPause => _t('일시정지', '一時停止', 'Pause');
+  String get guideDemoReplay => _t('처음부터', '最初から', 'Replay');
+  String guideDemoShowStep(int n) => _t('$n단계 장면 보기', '手順$nの場面を見る', 'Show step $n');
+
   // 3D scene labels and controls
   String get sceneFront => _t('앞 (手前)', '手前', 'Front (手前)');
   String get resetView => _t('시점 초기화', '視点をリセット', 'Reset view');

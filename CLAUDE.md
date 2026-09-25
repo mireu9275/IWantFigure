@@ -11,12 +11,14 @@
 | `app/` | Flutter 앱 (Flutter 3.47.5 / Dart 3.13.4, android·ios만) |
 | `app/lib/engine/` | 조준 룰 엔진 `AimEngine`, 입력(`inputs.dart`, `EngineOptions`), 결과(`aim_plan.dart`) |
 | `app/lib/models/` | `analysis.dart`(스키마와 1:1), `scene.dart`(3D 씬, 필드 좌표 mm) |
-| `app/lib/scene3d/` | 외부 패키지 없는 소프트웨어 3D(투영·페인터·뷰) |
+| `app/lib/scene3d/` | 외부 패키지 없는 소프트웨어 3D(투영·페인터·뷰, 키프레임 타임라인 `timeline.dart`) |
+| `app/lib/guide/` | 가이드 모션 데모: 공통 빌더(`guide_demo.dart`), 유형→데모 등록부(`guide_demos.dart`), 계열별 데모(`demos/`) |
 | `app/lib/screens/`, `app/lib/widgets/` | 화면, 사진 오버레이·보정 핸들·단계 카드 등 |
 | `app/lib/services/` | 세션 컨트롤러, API 클라이언트, 모의 API, 얼굴 블러, 히스토리, 설정 |
 | `app/lib/l10n/` | ko/ja/en 문자열(`strings.dart`), 유형 가이드 본문(`guide_content.dart`) |
-| `app/test/` | 앱 테스트 (현재 116건) |
+| `app/test/` | 앱 테스트 (현재 194건) |
 | `app/tool/screenshots_test.dart` | 스크린샷 생성 도구 → `docs/images/` 덮어씀 (폰트: `app/tool/fonts/`, gitignore) |
+| `app/tool/guide_demo_frames_test.dart` | 가이드 데모 키프레임 시트 → `app/build/guide_demo_frames/` (데모를 고치면 눈으로 확인) |
 | `server/IWantFigure.Server/` | 분석 API (`/healthz`, `/api/v1/analyze`), 이미지 파이프라인, Mock/Gemini/Claude 프로바이더 |
 | `server/IWantFigure.Server.Tests/` | xUnit (현재 113건, 네트워크 불필요) |
 | `shared/` | 앱·서버 공용 계약: `analysis.schema.json`, `prompt/system_prompt.md`, `samples/` |
