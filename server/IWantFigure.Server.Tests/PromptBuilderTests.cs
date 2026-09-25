@@ -60,10 +60,11 @@ public class PromptBuilderTests
         string notes = string.Concat(Enumerable.Repeat("line\n", 400)); // 2000 chars, many newlines
 
         string text = Build(new AnalyzeHints { Notes = notes, MachineFamily = new string('x', 1200) });
+        string[] lines = text.ReplaceLineEndings("\n").Split('\n'); // AppendLine emits \r\n on Windows
 
-        string notesLine = text.Split('\n').Single(l => l.StartsWith("- notes:", StringComparison.Ordinal));
+        string notesLine = lines.Single(l => l.StartsWith("- notes:", StringComparison.Ordinal));
         Assert.True(notesLine.Length <= "- notes: ".Length + PromptBuilder.MaxHintTextLength + 3);
-        string familyLine = text.Split('\n').Single(l => l.StartsWith("- machine_family:", StringComparison.Ordinal));
+        string familyLine = lines.Single(l => l.StartsWith("- machine_family:", StringComparison.Ordinal));
         Assert.EndsWith("...", familyLine);
         Assert.True(familyLine.Length <= "- machine_family: ".Length + PromptBuilder.MaxHintTextLength + 3);
     }

@@ -172,7 +172,8 @@ void main() {
       ),
       photoBytes: Uint8List.fromList([9]),
     );
-    final photosDir = Directory('${dir.path}/iwantfigure/photos');
+    final sep = Platform.pathSeparator;
+    final photosDir = Directory('${dir.path}${sep}iwantfigure${sep}photos');
     expect(File(stored.photoPath).parent.path, photosDir.path);
     expect(RegExp(r'^[A-Za-z0-9_-]+\.jpg$').hasMatch(stored.photoPath.split(Platform.pathSeparator).last), isTrue);
     expect(File('${dir.path}/evil.jpg').existsSync(), isFalse);

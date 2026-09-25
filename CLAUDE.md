@@ -62,7 +62,7 @@ dotnet run --project IWantFigure.Server
 10. 개인정보: 사진은 업로드 전 기기 안에서 얼굴 블러. 서버는 이미지를 저장·로깅하지 않는다. 이 흐름을 약하게 만드는 변경은 사용자와 먼저 상의.
 11. 확인하지 못한 내용은 추측으로 단정하지 말고 "(확인 필요)"로 표시한다.
 12. 개인 이메일 등 개인정보를 문서·코드·커밋 메시지에 쓰지 않는다(git config 예시는 `<본인 GitHub 이메일>` 같은 자리표시자).
-13. 사용자 PC는 Windows로 추정(확인되면 갱신). 사용자에게 안내하는 명령은 PowerShell 기준으로 쓰고, bash와 다르면 둘 다 적는다. 사용자는 C# WinForms(.NET Framework 4.8.1)·Kotlin Android·MSSQL 경험이 있고 Flutter·iOS는 처음이므로, 필요하면 C#/Kotlin에 빗대어 설명한다.
+13. 사용자 PC는 Windows 11(2026-09-25 확인). 사용자에게 안내하는 명령은 PowerShell 기준으로 쓰고, bash와 다르면 둘 다 적는다. 사용자는 C# WinForms(.NET Framework 4.8.1)·Kotlin Android·MSSQL 경험이 있고 Flutter·iOS는 처음이므로, 필요하면 C#/Kotlin에 빗대어 설명한다.
 
 ## 핵심 설계 원칙
 
