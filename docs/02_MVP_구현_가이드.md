@@ -106,13 +106,14 @@ IWantFigure/
 ### 3.5 실행
 
 ```bash
-export PATH=/opt/flutter-sdk/flutter/bin:$PATH   # 또는 로컬 Flutter 3.47.x
 cd app
 flutter pub get
 flutter analyze
 flutter test
 flutter run            # 기기/에뮬레이터. 기본은 모크 모드
 ```
+
+Flutter 3.47.5가 PATH에 있어야 한다. 로컬 설치·Android Studio 설정·Windows 명령은 `04_진행정리_로컬개발_가이드.md` 3장 참조.
 
 설정 화면에서 모크 모드를 끄고 서버 URL을 넣으면 실제 분석을 사용한다(Android 에뮬레이터에서 호스트 PC는 `http://10.0.2.2:8080`).
 
@@ -138,7 +139,7 @@ dotnet run --project IWantFigure.Server
 
 ## 3.6 화면 캡처 도구
 
-`app/tool/screenshots_test.dart`는 실제 앱(모의 분석, 합성 기계 사진, Noop 얼굴 검출기)을 폰 크기로 렌더링해 `docs/images/*.png`를 만든다. 일반 테스트 스위트에는 포함되지 않으며 `flutter test tool/screenshots_test.dart`로 직접 실행한다. 한글·일본어 글리프를 위해 Noto Sans KR/JP 폰트 파일 경로를 `IWF_NOTO_FONT`로 줄 수 있다(없으면 시스템 기본 테스트 폰트로 렌더링됨). 오버레이·3D 라벨은 테마 폰트(`textTheme.bodySmall`)를 따르므로 실기에서는 OS 폰트로 표시된다.
+`app/tool/screenshots_test.dart`는 실제 앱(모의 분석, 합성 기계 사진, Noop 얼굴 검출기)을 폰 크기로 렌더링해 `docs/images/*.png`를 만든다. 일반 테스트 스위트에는 포함되지 않으며 `flutter test tool/screenshots_test.dart`로 직접 실행한다. 한글·일본어 글리프를 위해 `app/tool/fonts/NotoSansKR.ttf`와 `NotoSansJP.ttf`를 넣어 두거나(이 폴더는 gitignore 대상), `IWF_NOTO_FONT`로 NotoSansKR 파일 경로를 직접 줄 수 있다. 폰트가 없으면 테스트는 통과하지만 한글·일본어가 네모로 렌더링된 이미지가 `docs/images`를 덮어쓰므로, 그 경우 `git restore docs/images`로 되돌린다. 폰트 받는 곳과 절차는 `04_진행정리_로컬개발_가이드.md` 3-8. 오버레이·3D 라벨은 테마 폰트(`textTheme.bodySmall`)를 따르므로 실기에서는 OS 폰트로 표시된다.
 
 ## 4.1 CI
 

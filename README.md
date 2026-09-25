@@ -11,7 +11,7 @@
 | `app/` | 모바일 앱: 촬영 → 분석 → 사진 오버레이 / 3D 뷰 / 단계별 안내 → 플레이 관찰 → 결과 저장 | Flutter 3.47, Dart 3.13 (외부 3D·상태관리 패키지 없음) |
 | `server/` | 분석 API: 이미지 리사이즈 → LLM(Gemini / Claude / Mock) → 좌표 정규화·스키마 검증 | ASP.NET Core, .NET 10 |
 | `shared/` | 앱·서버 공용 계약: JSON 스키마, 시스템 프롬프트, 샘플 응답 | |
-| `docs/` | 기획·기술 분석(`01`), 구현 가이드(`02`), 리서치 노트 | |
+| `docs/` | 기획·기술 분석(`01`), 구현 가이드(`02`), 스토어·프라이버시(`03`), 진행 정리·로컬 가이드(`04`), 리서치 노트 | |
 
 ## 화면
 
@@ -27,7 +27,7 @@
 |---|---|---|---|
 | ![회전](docs/images/result_rotation_ko.png) | ![3D 회전](docs/images/result_3d_rotation_ko.png) | ![가이드](docs/images/guide_list_ko.png) | ![가이드 상세](docs/images/guide_detail_ko.png) |
 
-캡처는 실제 앱을 위젯 테스트로 렌더링한 것입니다(모의 분석 + 합성 사진). 재생성: `cd app && flutter test tool/screenshots_test.dart`.
+캡처는 실제 앱을 위젯 테스트로 렌더링한 것입니다(모의 분석 + 합성 사진). 재생성: `app` 폴더로 이동한 뒤 `flutter test tool/screenshots_test.dart`를 실행합니다(한글·일본어 폰트 준비는 [`docs/04`](docs/04_진행정리_로컬개발_가이드.md) 3-8).
 
 ## 빠른 시작
 
@@ -50,6 +50,8 @@ export Analysis__Provider=gemini      # 또는 claude
 export Gemini__ApiKey=...             # 또는 Claude__ApiKey=...
 dotnet run --project IWantFigure.Server   # http://localhost:8080
 ```
+
+Windows PowerShell은 `$env:Analysis__Provider = "gemini"` 형식입니다. 키는 환경변수보다 `dotnet user-secrets`에 두는 것을 권장합니다([`docs/04`](docs/04_진행정리_로컬개발_가이드.md) 3-5).
 
 API 키는 서버에만 둡니다. 앱은 이 서버와만 통신합니다. 자세한 설정과 curl 예시는 `server/README.md`.
 

@@ -35,6 +35,8 @@ import 'package:iwantfigure/services/session_controller.dart';
 import '../test/helpers.dart';
 
 final _outDir = Directory('../docs/images');
+// `flutter test` sets FLUTTER_ROOT for the test process, so this normally
+// points at the local SDK. The fallback is only the cloud dev container path.
 final _flutterRoot = Platform.environment['FLUTTER_ROOT'] ?? '/opt/flutter-sdk/flutter';
 final _notoPath = Platform.environment['IWF_NOTO_FONT'] ?? 'tool/fonts/NotoSansKR.ttf';
 

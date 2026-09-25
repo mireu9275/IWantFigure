@@ -24,3 +24,7 @@ server/.vs/
 
 # Screenshot tool fonts (local copies for app/tool/screenshots_test.dart, not committed)
 app/tool/fonts/
+
+# Claude Code personal files (per-user instructions/settings, not committed)
+CLAUDE.local.md
+.claude/settings.local.json

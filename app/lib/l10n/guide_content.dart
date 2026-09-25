@@ -53,9 +53,8 @@ class LayoutGuide {
   List<String> get allText => [summary, ...recognize, ...howTo, ...tips, ...abortWhen, typicalCost];
 }
 
-/// Emoji shown next to a layout type in the guide list.
-/// Material icon for a layout type (icons render on every device/font,
-/// unlike emoji).
+/// Material icon shown next to a layout type in the guide list (icons
+/// render on every device and font, unlike emoji).
 IconData layoutIcon(LayoutType t) => switch (t) {
       LayoutType.bridgeParallel => Icons.view_column_outlined,
       LayoutType.bridgeHanoji => Icons.architecture,

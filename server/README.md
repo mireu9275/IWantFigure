@@ -179,9 +179,11 @@ Errors always have the shape `{"error": "<code>", "message"?: "...", "provider_m
 ### curl example
 
 ```bash
-IMG=$(base64 -w0 photo.jpg)          # macOS: base64 -i photo.jpg | tr -d '\n'
-jq -n --arg img "$IMG" \
-  '{image_base64:$img, mime:"image/jpeg", locale:"ko", hints:{claw_count:2, notes:"first try"}}' \
+base64 -w0 photo.jpg > img.b64        # macOS: base64 -i photo.jpg -o img.b64
+# --rawfile reads the image from a file: passing a real photo through --arg
+# fails with "Argument list too long".
+jq -n --rawfile img img.b64 \
+  '{image_base64:($img|split("\n")|join("")), mime:"image/jpeg", locale:"ko", hints:{claw_count:2, notes:"first try"}}' \
   > request.json
 
 curl -s http://localhost:8080/api/v1/analyze \

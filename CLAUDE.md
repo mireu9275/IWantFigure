@@ -27,7 +27,7 @@
 
 앱 (`app/` 폴더에서):
 
-```
+```bash
 flutter pub get
 flutter analyze
 flutter test
@@ -36,20 +36,22 @@ flutter run
 
 서버 (`server/` 폴더에서):
 
-```
+```bash
 dotnet build -c Release
 dotnet test -c Release --no-build
 dotnet run --project IWantFigure.Server
 ```
 
+- `flutter run`·`dotnet run`은 끝나지 않고 계속 실행되는 명령이다. 백그라운드로 실행하거나 사용자에게 별도 터미널에서 실행해 달라고 요청한다.
+
 - 서버 기본 주소는 `http://localhost:8080`, 기본 프로바이더는 `mock`. 실기 LAN 연결은 `-- --urls http://0.0.0.0:8080`.
-- API 키는 `dotnet user-secrets set "Gemini:ApiKey" "<키>" --project IWantFigure.Server`. user-secrets는 Development(기본 launch profile)에서만 로드된다.
-- 앱은 기본이 모의 모드. 에뮬레이터에서 호스트 PC 서버는 `http://10.0.2.2:8080`.
+- API 키는 `dotnet user-secrets set "Gemini:ApiKey" "<키>" --project IWantFigure.Server`. user-secrets는 Development(기본 launch profile)에서만 로드된다. **`Analysis:Provider`는 user-secrets에 넣지 말고** 실행 터미널의 환경변수(`Analysis__Provider`)로 켠다. 현재 프로바이더는 `/healthz`의 `provider`로 확인.
+- 앱은 기본이 모의 모드. 에뮬레이터에서 호스트 PC 서버는 `http://10.0.2.2:8080`, 실기 USB는 `adb reverse tcp:8080 tcp:8080` + 앱 URL `http://127.0.0.1:8080`.
 
 ## 작업 규칙 (반드시 지킬 것)
 
 1. **응답과 문서는 한국어.** 제품명·명령어·일본어 용어(橋渡し, 縦ハメ 등)는 원어 그대로.
-2. **항상 `develop` 브랜치에서 작업.** 다른 브랜치로 바꾸거나 새 브랜치를 만들 때는 사용자에게 먼저 물어볼 것.
+2. **항상 `develop` 브랜치에서 작업.** 세션을 시작하면 먼저 `git branch --show-current`로 확인한다. develop이 아니면 파일을 고치기 전에 사용자에게 알린다. 원격에 develop이 없으면(clone 직후에는 `claude/japan-figure-gacha-ai-app-78bxf4`만 있음) docs/04 3-2 절차(`git switch -c develop` → `git push -u origin develop`)를 사용자 승인 뒤에 진행한다. 그 밖의 브랜치 전환·생성도 사용자에게 먼저 묻는다.
 3. **커밋은 사용자 본인 명의.** 커밋 메시지·PR 설명에 `Co-Authored-By: Claude` 등 Claude 표기를 넣지 않는다. 커밋·push는 사용자가 요청할 때만.
 4. **git 명령은 `cd`와 분리.** `cd <폴더> && git ...`처럼 한 줄로 잇지 말고, 먼저 `cd`로 이동한 뒤 별도 명령으로 `git`을 실행한다.
 5. **커밋 전 검증 필수**: `app`에서 `flutter analyze`(이슈 0)와 `flutter test`, `server`에서 `dotnet test`가 모두 통과해야 한다. 서버는 경고=오류(TreatWarningsAsErrors).
@@ -59,6 +61,8 @@ dotnet run --project IWantFigure.Server
 9. **API 키는 서버에만.** 앱 코드·저장소·로그에 키를 넣지 않는다. 비밀은 user-secrets나 환경변수로.
 10. 개인정보: 사진은 업로드 전 기기 안에서 얼굴 블러. 서버는 이미지를 저장·로깅하지 않는다. 이 흐름을 약하게 만드는 변경은 사용자와 먼저 상의.
 11. 확인하지 못한 내용은 추측으로 단정하지 말고 "(확인 필요)"로 표시한다.
+12. 개인 이메일 등 개인정보를 문서·코드·커밋 메시지에 쓰지 않는다(git config 예시는 `<본인 GitHub 이메일>` 같은 자리표시자).
+13. 사용자 PC는 Windows로 추정(확인되면 갱신). 사용자에게 안내하는 명령은 PowerShell 기준으로 쓰고, bash와 다르면 둘 다 적는다. 사용자는 C# WinForms(.NET Framework 4.8.1)·Kotlin Android·MSSQL 경험이 있고 Flutter·iOS는 처음이므로, 필요하면 C#/Kotlin에 빗대어 설명한다.
 
 ## 핵심 설계 원칙
 
@@ -75,7 +79,8 @@ dotnet run --project IWantFigure.Server
 ## 알려진 주의점
 
 - Android·iOS 실기/에뮬레이터 빌드는 아직 검증되지 않았다. ML Kit 문제 격리는 `IWantFigureApp(faceDetector: const NoopFaceRegionDetector())`.
-- Android 빌드에는 NDK 28.2.13676358과 CMake(3.10+)가 필요하다(`jni` 플러그인).
+- ML Kit 얼굴 검출은 실기에서 한 번도 돌려 보지 않았다(테스트는 가짜/Noop 검출기). 검출 오류 시 경고 없이 원본을 보낸다(fail-open, `mlkit_face_detector.dart`).
+- Android 빌드에는 NDK 28.2.13676358, CMake 3.22.1(AGP 기본 버전, `jni` 플러그인이 버전을 지정하지 않음), SDK Platform API 36 + 35(`jni` 플러그인)가 필요하다.
 - 설정 화면의 서버 URL 입력란은 모의 모드를 꺼야 활성화된다.
 - 스크린샷 도구는 `docs/images/`를 덮어쓴다. 의도하지 않은 PNG 변경은 커밋하지 않는다.
 

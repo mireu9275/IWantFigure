@@ -41,7 +41,7 @@ class GuideScreen extends StatelessWidget {
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
-              leading: _EmojiBadge(type: type),
+              leading: _LayoutIconBadge(type: type),
               title: Text(s.layoutLabel(type), maxLines: 2, overflow: TextOverflow.ellipsis),
               subtitle: Text(guide.summary, maxLines: 2, overflow: TextOverflow.ellipsis),
               trailing: const Icon(Icons.chevron_right),
@@ -81,7 +81,7 @@ class GuideDetailScreen extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _EmojiBadge(type: type, large: true),
+                  _LayoutIconBadge(type: type, large: true),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -222,8 +222,8 @@ class GuideDetailScreen extends StatelessWidget {
   }
 }
 
-class _EmojiBadge extends StatelessWidget {
-  const _EmojiBadge({required this.type, this.large = false});
+class _LayoutIconBadge extends StatelessWidget {
+  const _LayoutIconBadge({required this.type, this.large = false});
 
   final LayoutType type;
   final bool large;
