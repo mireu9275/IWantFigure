@@ -109,6 +109,10 @@ void main() {
     expect(tl.steps, [1, 2]);
     expect(tl.startOfStep(2), 1000);
     expect(tl.startOfStep(7), isNull);
+    // The zero-length hide key does not split step 2's stretch.
+    expect(tl.rangeOfStep(1), (0, 1000));
+    expect(tl.rangeOfStep(2), (1000, 1500));
+    expect(tl.rangeOfStep(7), isNull);
   });
 
   test('actor parts follow the actor pose', () {

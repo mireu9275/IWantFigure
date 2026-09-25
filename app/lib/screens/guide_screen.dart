@@ -59,7 +59,7 @@ class GuideScreen extends StatelessWidget {
 
 /// Guide for one layout type. When the type has a motion demo it plays near
 /// the top and stays pinned (shrunk) while the text scrolls; the How-to step
-/// on screen is highlighted and tapping a step jumps the demo to it.
+/// on screen is highlighted and tapping a step replays just that step.
 class GuideDetailScreen extends StatefulWidget {
   const GuideDetailScreen({super.key, required this.type});
 
@@ -100,7 +100,8 @@ class _GuideDetailScreenState extends State<GuideDetailScreen> {
     final demo = _demoOf(s);
     final scenes = demo?.timeline.steps.toSet() ?? const <int>{};
     final width = MediaQuery.sizeOf(context).width;
-    final maxExtent = ((width - 32) * 0.92).clamp(260.0, 440.0) + 12;
+    // Expanded: view + step bar + two-line caption; shrunk: the view only.
+    final maxExtent = ((width - 32) * 0.92).clamp(260.0, 440.0) + 12 + 48;
     final minExtent = ((width - 32) * 0.42).clamp(150.0, 210.0) + 12;
     return Scaffold(
       appBar: AppBar(
@@ -122,9 +123,26 @@ class _GuideDetailScreenState extends State<GuideDetailScreen> {
                       _LayoutIconBadge(type: widget.type, large: true),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(
-                          g.summary,
-                          style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onPrimaryContainer),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              g.summary,
+                              style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onPrimaryContainer),
+                            ),
+                            // Korean screens are plain Korean; the Japanese name is
+                            // shown once here for talking to staff in Japan.
+                            if (s.locale == AppLocale.ko && widget.type != LayoutType.unknown)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  s.guideJapaneseName(widget.type.labelJa),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: scheme.onPrimaryContainer.withValues(alpha: 0.75),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -157,7 +175,7 @@ class _GuideDetailScreenState extends State<GuideDetailScreen> {
                   demo: demo,
                   steps: g.howTo,
                   step: _step,
-                  showCaption: shrink < (maxExtent - minExtent) / 2,
+                  expanded: shrink < (maxExtent - minExtent) / 2,
                 ),
               ),
             ),
@@ -292,7 +310,7 @@ class _GuideDetailScreenState extends State<GuideDetailScreen> {
       );
 
   /// Numbered How-to step. Steps the demo shows are highlighted while they
-  /// play and jump the demo to their scene when tapped.
+  /// play and replay their scene when tapped.
   Widget _numbered(BuildContext context, S s, int i, String text, {required bool hasScene}) {
     final scheme = Theme.of(context).colorScheme;
     return ValueListenableBuilder<int>(
@@ -339,7 +357,7 @@ class _GuideDetailScreenState extends State<GuideDetailScreen> {
           hint: s.guideDemoShowStep(i + 1),
           child: InkWell(
             borderRadius: BorderRadius.circular(8),
-            onTap: () => _demoKey.currentState?.seekToStep(i),
+            onTap: () => _demoKey.currentState?.playStep(i),
             child: body,
           ),
         );

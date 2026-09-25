@@ -36,7 +36,7 @@ IWantFigure/
 ## 2. 공용 계약 (`shared/`)
 
 - `analysis.schema.json` — LLM/서버 응답 스키마. 좌표는 **분석된 이미지 기준 0..1 정규화**, 원점 좌상단, x 오른쪽, y 아래.
-- `prompt/system_prompt.md` — 배치 유형 분류 체계(15종)와 규칙. 서버가 그대로 시스템 프롬프트로 사용.
+- `prompt/system_prompt.md` — 배치 유형 분류 체계(18종, unknown 포함)와 규칙. 서버가 그대로 시스템 프롬프트로 사용.
 - `samples/bridge_parallel.json` — 橋渡し 샘플. 앱 모크 모드와 테스트, 서버 Mock 프로바이더가 공유.
 
 응답 예(서버가 `analysis_id`, `provider`, `model`, `latency_ms`, `image{width,height}`를 덧붙임):
@@ -62,19 +62,19 @@ IWantFigure/
 
 | 경로 | 내용 | 비고 |
 |---|---|---|
-| `lib/models/analysis.dart` | `AnalysisResult`, enum(LayoutType 15종, Technique, ObjectKind, TargetEdge, Arm…), `NBox`/`Pt` | 스키마와 1:1 |
+| `lib/models/analysis.dart` | `AnalysisResult`, enum(LayoutType 18종, Technique, ObjectKind, TargetEdge, Arm…), `NBox`/`Pt` | 스키마와 1:1 |
 | `lib/models/scene.dart` | `Scene3D`와 구성요소(`SceneBox`, `SceneCylinder`, `SceneClaw`, `SceneMarker`, `SceneMotion`), `Vec3`/`Pose`/`Rotation` | 필드 좌표계 mm |
 | `lib/engine/` | `AimEngine`(룰 엔진), `inputs.dart`(PrizeSpec, Observation, SceneCorrections, EngineOptions), `aim_plan.dart`(AimPlan, AimStep, OverlayGeometry) | 순수 Dart, `flutter test`로 검증 |
 | `lib/scene3d/` | 소프트웨어 3D 렌더러(`OrbitCamera`, `ScenePainter`, `SceneView`), 키프레임 애니메이션 `SceneTimeline`(`timeline.dart`) | 외부 패키지 없음 |
-| `lib/guide/` | 가이드 모션 데모: 공통 빌더 `guide_demo.dart`(`GuideDemo`, `DemoScript`, `tiltAbout`/`pointOn`), 등록부 `guide_demos.dart`(유형 → 데모), 계열별 데모 `demos/`(다리·밀어 떨어뜨리기·링/후크·집어 옮기기·たこ焼き, unknown 제외 14종) | 3.7절 |
+| `lib/guide/` | 가이드 모션 데모: 공통 빌더 `guide_demo.dart`(`GuideDemo`, `DemoScript`, `tiltAbout`/`pointOn`), 등록부 `guide_demos.dart`(유형 → 데모), 계열별 데모 `demos/`(다리·밀어 떨어뜨리기·링/후크·집어 옮기기·たこ焼き, unknown 제외 17종) | 3.7절 |
 | `lib/services/` | `SettingsStore`(SharedPreferences), `AnalyzeApi`/`MockAnalyzeApi`, `PhotoPicker`(image_picker), `HistoryStore`(문서 폴더 JSON + 사진 복사, 원자적 저장), `SessionController`(분석·보정·관찰·플랜 재계산), **`face_blur.dart`**(얼굴 모자이크, 순수 Dart) + **`mlkit_face_detector.dart`**(ML Kit 온디바이스 검출) | |
 | `lib/app/` | `IWantFigureApp`, `AppScope`(설정·히스토리·서비스 주입) | |
 | `lib/screens/` | `HomeScreen` → `AnalyzingScreen` → `ResultScreen`(사진/3D/설명 탭), `SettingsScreen`, `GuideScreen`/`GuideDetailScreen`(유형별 기초 가이드) | |
-| `lib/l10n/guide_content.dart` | 15개 배치 유형의 가이드 본문(ko/ja/en): 알아보기·이렇게 노리기·기법·팁·철수·참고 비용, `layoutIcon` | 출처는 `docs/01` 3장, `docs/research/domain.md` |
+| `lib/l10n/guide_content.dart` | 18개 배치 유형의 가이드 본문(ko/ja/en): 알아보기·이렇게 노리기·기법·팁·철수·참고 비용, `layoutIcon` | 출처는 `docs/01` 3장, `docs/research/domain.md` |
 | `lib/widgets/` | `PhotoOverlay`(오버레이·보정 핸들·줌·추가 바·회전 글리프), `CurrentStepCard`, `ObservationBar`, `ClawRotationSelector`, `PrizeSheet`, `ExplanationTab`, `ArmBadge`, `GuideDemoView`(가이드 모션 데모 재생) | |
 | `lib/l10n/strings.dart` | ko/ja/en 문자열(`S.of(context)`) | 사용자 노출 문자열은 전부 여기 |
 | `assets/samples/` | 모크용 샘플 응답 | `shared/samples`의 복사본 |
-| `test/` | 엔진 17, 3D 18, UI·서비스·블러·동의·가이드 85, 가이드 데모 74 = 194건 | `flutter test` |
+| `test/` | 엔진 18, 3D 18, UI·서비스·블러·동의·가이드 88, 가이드 데모 89, 한국어 문구 4 = 217건 | `flutter test` |
 
 ### 3.2 좌표계 두 가지
 
@@ -118,9 +118,13 @@ Flutter 3.47.5가 PATH에 있어야 한다. 로컬 설치·Android Studio 설정
 
 설정 화면에서 모크 모드를 끄고 서버 URL을 넣으면 실제 분석을 사용한다(Android 에뮬레이터에서 호스트 PC는 `http://10.0.2.2:8080`).
 
+모크 모드는 사진을 분석하지 않고 번들 샘플(평행한 봉 2개에 걸친 상자)을 돌려준다. 결과가 `provider == "mock"`이면 결과 화면 탭 위에 "모의 분석 결과" 안내 띠가 뜬다(히스토리에서 다시 열어도 유지). 실제 분석에서는 시스템 프롬프트가 크레인게임 기계가 아닌 사진(사람·음식·방 등)을 `unknown` + 경고 + 재촬영 요청으로 돌려주게 한다.
+
+**한국어 화면 문구**: 자연스러운 한국어만 쓴다(봉·집게·집게발·앞쪽/안쪽·출구·상자·판, 유형 이름은 설명형). 일본 명칭은 가이드 상세의 "일본 명칭" 한 줄에만 나오고, 일본어·영어 화면은 일본어 용어를 그대로 쓴다. `test/korean_copy_test.dart`가 `strings.dart`의 모든 한국어 문구, 한국어 가이드, 엔진의 한국어 출력에 일본어 글자가 없는지 검사한다. LLM이 쓰는 한국어 설명도 시스템 프롬프트의 용어 대응표를 따른다.
+
 ## 4. 서버 (`server/`)
 
-- ASP.NET Core minimal API, .NET 10. 엔드포인트: `GET /healthz`, `POST /api/v1/analyze`. xUnit 테스트 113건(`dotnet test`).
+- ASP.NET Core minimal API, .NET 10. 엔드포인트: `GET /healthz`, `POST /api/v1/analyze`. xUnit 테스트 116건(`dotnet test`).
 - 구조: `Endpoints/`(라우팅·`X-App-Key` 필터), `Imaging/ImagePipeline.cs`, `Providers/`(Mock·Gemini·Claude, 프롬프트 빌더, 스키마 변환), `Analysis/`(정규화·스키마 검증·재시도 오케스트레이션), `Configuration/Options.cs`.
 - 오류 응답: `{"error": <code>, "message": <상세>}`(4xx), `{"error": "provider_error", "provider_message": <일반화 문구>}`(502), 503 `provider_not_configured`, 429 시 `Retry-After: 60`.
 - 운영 옵션: `Server:AppKey`, `Server:UseForwardedHeaders` + `Server:KnownProxies`/`KnownNetworks`(프록시 뒤 IP별 레이트리밋), `Analysis:MaxImagePixels`(JPEG 50MP)/`MaxImagePixelsNonJpeg`(16MP)/`MaxConcurrentDecodes`(4), `Claude:MaxTokens`(8192)/`Effort`(low)/`Thinking`(adaptive; haiku 계열은 자동 생략).
@@ -148,7 +152,7 @@ dotnet run --project IWantFigure.Server
 
 - **모델**: `SceneTimeline`(`lib/scene3d/timeline.dart`)은 움직이지 않는 무대(`Scene3D`: 바·받침대·낙하구·카메라)와 움직이는 `SceneActor`(경품과 거기 붙은 링·후크·공을 한 덩어리로), 집게 상태 `ClawState`, 키프레임 `SceneKey`로 이뤄진다. `sceneAt(ms)`가 그 시각의 일반 `Scene3D`를 만든다. 키마다 `step`(가이드 단계 인덱스), `hide`(낙하구로 떨어진 액터 숨김), 조준 마커, 이징 곡선을 둔다.
 - **작성**: 데모는 `DemoScript`의 표준 동작(`aim` → `play`: 하강·닫힘·들어올림 후 미끄러짐·열림, `carry`: 집어 옮겨 떨어뜨리기, `move`: 굴러가기·낙하)으로 쓴다. 접점은 `pointOn`(경품 자세 기준 u/v/w)으로 계산하고, 기울기는 `tiltAbout`(피벗 기준 회전)로 만든다. 橋渡し의 "앞끝이 바 사이로 빠져 비스듬히 선 자세"는 두 바에 동시에 닿는 조건을 푸는 `bridgeWedge`로 구한다.
-- **화면**: 데모는 요약 카드 아래에 크게 보이고, 스크롤하면 작아진 채 상단에 고정된다(`SliverPersistentHeader`). 재생 중인 단계가 "이렇게 노리기" 목록에서 강조되고, 장면이 있는 단계(▶ 아이콘)를 누르면 그 장면으로 이동한다. 재생/일시정지·처음부터·시점 초기화 버튼, 드래그 회전·핀치 줌이 있다. 시스템의 "애니메이션 줄이기"가 켜져 있으면 멈춘 상태로 시작한다. 데모는 설명용 예시이며, 실제 움직임은 기계 설정과 경품 무게에 따라 다르다는 고지를 함께 표시한다.
+- **화면**: 데모는 요약 카드 아래에 크게 보이고, 스크롤하면 작아진 채 상단에 고정된다(`SliverPersistentHeader`). 재생 중인 단계가 "이렇게 노리기" 목록에서 강조된다. 보는 방법은 두 가지다. 오른쪽 위 재생 버튼은 전체를 반복 재생하고, 3D 아래 단계 막대(이전 단계·단계 번호·다음 단계·이 단계 다시)나 목록의 단계(▶ 아이콘)를 누르면 **그 단계만 한 번 재생하고 멈춘다**(`GuideDemoViewState.playStep`, 구간은 `SceneTimeline.rangeOfStep`). 시점 초기화 버튼, 드래그 회전·핀치 줌이 있다. 3D 위를 끌면 페이지가 아니라 시점이 돌아가므로, 페이지 스크롤은 3D 밖을 끌어서 한다. 시스템의 "애니메이션 줄이기"가 켜져 있으면 멈춘 상태로 시작한다. 데모는 설명용 예시이며, 실제 움직임은 기계 설정과 경품 무게에 따라 다르다는 고지를 함께 표시한다.
 - **자동 검사**(`test/guide_demo_test.dart`): 데모마다 단계 인덱스가 가이드 단계 수 안에 있는지, 길이가 8~40초인지, 집게·경품이 필드 안에 있는지, 경품(박스·공)이 바·받침대를 파고들지 않는지(키프레임 3mm, 중간 프레임 15mm 이하), 마지막에 경품이 낙하구로 떨어지는지 확인한다. 박스·링·공끼리의 겹침과 집게 팔의 관통은 검사하지 않는다.
 - **눈으로 확인**(`tool/guide_demo_frames_test.dart`, 일반 테스트와 분리): 키프레임마다 데모 카메라와 옆 시점(+X에서, 앞이 왼쪽) 두 장을 한 장의 PNG로 모아 `build/guide_demo_frames/<wire>.png`에 쓴다. `IWF_DEMO_TYPES=bridge_parallel,front_drop`처럼 유형을 고를 수 있다. 데모를 고친 뒤에는 이 시트를 보고 경품이 떠 있거나 파고들지 않는지, 단계 글과 움직임이 맞는지 확인한다.
 

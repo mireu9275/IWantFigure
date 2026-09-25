@@ -41,8 +41,11 @@ void main() {
           expect(g.techniques, isNotEmpty, reason: '$type techniques');
           expect(g.techniques, isNot(contains(Technique.unknown)));
           expect(g.techniques.toSet().length, g.techniques.length, reason: '$type has duplicate techniques');
-          // The Japanese community term stays in the text (in parentheses).
-          expect(g.summary, contains(jaKeyTerm(type)), reason: '$type summary should name ${jaKeyTerm(type)}');
+          // The Japanese community term stays in the Japanese and English text;
+          // Korean screens are plain Korean (the name is shown once on the page).
+          if (code != 'ko') {
+            expect(g.summary, contains(jaKeyTerm(type)), reason: '$type summary should name ${jaKeyTerm(type)}');
+          }
           expect(g.typicalCost, contains('★'), reason: '$type cost is a community reference value');
         }
       }

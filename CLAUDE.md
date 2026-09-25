@@ -16,11 +16,11 @@
 | `app/lib/screens/`, `app/lib/widgets/` | 화면, 사진 오버레이·보정 핸들·단계 카드 등 |
 | `app/lib/services/` | 세션 컨트롤러, API 클라이언트, 모의 API, 얼굴 블러, 히스토리, 설정 |
 | `app/lib/l10n/` | ko/ja/en 문자열(`strings.dart`), 유형 가이드 본문(`guide_content.dart`) |
-| `app/test/` | 앱 테스트 (현재 194건) |
+| `app/test/` | 앱 테스트 (현재 217건) |
 | `app/tool/screenshots_test.dart` | 스크린샷 생성 도구 → `docs/images/` 덮어씀 (폰트: `app/tool/fonts/`, gitignore) |
 | `app/tool/guide_demo_frames_test.dart` | 가이드 데모 키프레임 시트 → `app/build/guide_demo_frames/` (데모를 고치면 눈으로 확인) |
 | `server/IWantFigure.Server/` | 분석 API (`/healthz`, `/api/v1/analyze`), 이미지 파이프라인, Mock/Gemini/Claude 프로바이더 |
-| `server/IWantFigure.Server.Tests/` | xUnit (현재 113건, 네트워크 불필요) |
+| `server/IWantFigure.Server.Tests/` | xUnit (현재 116건, 네트워크 불필요) |
 | `shared/` | 앱·서버 공용 계약: `analysis.schema.json`, `prompt/system_prompt.md`, `samples/` |
 | `docs/` | 01 기획, 02 구현 가이드, 03 스토어·프라이버시, 04 진행 정리·로컬 가이드, `research/`, `images/` |
 | `.github/workflows/ci.yml` | 모든 브랜치 push·PR에서 Flutter analyze+test, .NET build+test |
@@ -59,6 +59,7 @@ dotnet run --project IWantFigure.Server
 5. **커밋 전 검증 필수**: `app`에서 `flutter analyze`(이슈 0)와 `flutter test`, `server`에서 `dotnet test`가 모두 통과해야 한다. 서버는 경고=오류(TreatWarningsAsErrors).
 6. **`shared/`가 단일 계약.** 스키마·프롬프트·샘플을 바꾸면 `app/assets/samples/`의 복사본을 같은 내용으로 맞추고, `app/lib/models/analysis.dart`와 서버 테스트(정규화·스키마 변환)가 통과하는지 확인한다.
 7. **사용자에게 보이는 문자열은 `app/lib/l10n/`에만** 둔다(ko/ja/en 세 언어 모두 추가). 위젯 코드에 문자열을 하드코딩하지 않는다.
+   - **앱의 한국어 화면 문구는 자연스러운 한국어로만** 쓴다(2026-09-25 사용자 결정). 일본어 글자·용어를 넣지 않고 봉·집게·집게발·앞쪽/안쪽·출구·상자·판을 쓴다. 배치 유형 이름은 풀어 쓴 설명형(예: "평행한 봉 2개에 걸친 상자"). 일본 명칭은 가이드 상세의 "일본 명칭: …" 한 줄에만 보인다. 일본어·영어 화면은 일본어 용어를 그대로 쓴다. `app/test/korean_copy_test.dart`가 검사한다. (1번 규칙의 "일본어 용어는 원어 그대로"는 응답과 문서에만 해당한다.)
 8. **획득을 보장하는 표현 금지.** "반드시 잡힌다", "100%" 같은 문구를 앱 문자열·가이드·프롬프트에 쓰지 않는다. 추천은 참고용이다.
 9. **API 키는 서버에만.** 앱 코드·저장소·로그에 키를 넣지 않는다. 비밀은 user-secrets나 환경변수로.
 10. 개인정보: 사진은 업로드 전 기기 안에서 얼굴 블러. 서버는 이미지를 저장·로깅하지 않는다. 이 흐름을 약하게 만드는 변경은 사용자와 먼저 상의.
@@ -90,6 +91,6 @@ dotnet run --project IWantFigure.Server
 
 - `docs/04_진행정리_로컬개발_가이드.md` — 진행 정리, 로컬 환경 설정, 자주 나는 오류, 다음 할 일
 - `docs/02_MVP_구현_가이드.md` — 코드 구조, 좌표계, 룰 엔진, 개인정보 흐름, 검증 이력
-- `docs/01_기획_기술_분석.md` — 배치 유형 15종, 기법, 기술 선택, 로드맵
+- `docs/01_기획_기술_분석.md` — 배치 유형 18종(3.1절 표), 기법, 기술 선택, 로드맵
 - `docs/03_스토어_준비_프라이버시.md` — 프라이버시 정책 초안, 출시 체크리스트
 - `server/README.md` — 서버 설정 키, API, curl, Docker

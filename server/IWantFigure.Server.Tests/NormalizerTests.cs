@@ -151,6 +151,20 @@ public class NormalizerTests
 
     // ---------------------------------------------------------------- enums
 
+    [Theory]
+    [InlineData("bridge_four")]
+    [InlineData("bridge_mixed")]
+    [InlineData("hang_string")]
+    public void Newer_layout_types_pass_through(string layoutType)
+    {
+        JsonObject root = JsonNode.Parse(SampleJson.Normalized)!.AsObject();
+        root["layout_type"] = layoutType;
+
+        AnalysisDocument doc = Run(root.ToJsonString(), CoordinateConvention.NormalizedUnit);
+
+        Assert.Equal(layoutType, doc.LayoutType);
+    }
+
     [Fact]
     public void Invalid_enum_values_fall_back_to_safe_defaults()
     {

@@ -1,4 +1,4 @@
-/// Looping 3D motion demo of a layout type (guide page, 움직임으로 보기).
+/// 3D motion demo of a layout type (guide page, 움직임으로 보기).
 library;
 
 import 'package:flutter/material.dart';
@@ -9,15 +9,20 @@ import '../scene3d/projection.dart';
 import '../scene3d/scene_painter.dart';
 import '../scene3d/timeline.dart';
 
-/// Plays [demo] in a loop and publishes the guide step on screen to [step].
+/// Plays [demo] and publishes the guide step on screen to [step].
+///
+/// Two ways to watch: the play button runs the whole demo in a loop; a step
+/// number, the previous/next buttons or "replay this step" play just that
+/// step once and stop at its end, so a scene can be watched again. The page
+/// calls [GuideDemoViewState.playStep] when a How-to step is tapped.
 ///
 /// Drag to orbit, pinch to zoom, double-tap to reset the view (as in the
-/// result screen's 3D tab). The current step's text from [steps] is shown
-/// under the view unless [showCaption] is false (the page hides it when the
-/// view is shrunk). Starts paused when the platform asks for
-/// reduced motion. Use [GuideDemoViewState.seekToStep] to jump to a step.
+/// result screen's 3D tab). When [expanded] is true the step bar and the
+/// current step's text from [steps] are shown under the view (the page hides
+/// them while the view is shrunk). Starts paused when the platform asks for
+/// reduced motion.
 class GuideDemoView extends StatefulWidget {
-  const GuideDemoView({super.key, required this.demo, required this.steps, this.step, this.showCaption = true});
+  const GuideDemoView({super.key, required this.demo, required this.steps, this.step, this.expanded = true});
 
   final GuideDemo demo;
 
@@ -27,7 +32,7 @@ class GuideDemoView extends StatefulWidget {
   /// Receives the step on screen (-1 before the first one).
   final ValueNotifier<int>? step;
 
-  final bool showCaption;
+  final bool expanded;
 
   @override
   State<GuideDemoView> createState() => GuideDemoViewState();
@@ -42,6 +47,10 @@ class GuideDemoViewState extends State<GuideDemoView> with SingleTickerProviderS
   OrbitCamera? _gestureStartCamera;
   bool _playing = true;
   bool _started = false;
+
+  /// Bumped by every play/stop command so a finished single-step run does
+  /// not override a newer command.
+  int _run = 0;
 
   SceneTimeline get _timeline => widget.demo.timeline;
   double get _ms => _controller.value * _timeline.totalMs;
@@ -96,20 +105,31 @@ class GuideDemoViewState extends State<GuideDemoView> with SingleTickerProviderS
     if (notifier.value != step) notifier.value = step;
   }
 
-  /// Jumps to the first moment that shows [step] and plays from there.
+  /// Plays only [step] (its first stretch in the demo) and stops at its end.
   /// Returns false when the demo does not illustrate that step.
-  bool seekToStep(int step) {
-    final start = _timeline.startOfStep(step);
-    if (start == null) return false;
+  bool playStep(int step) {
+    final range = _timeline.rangeOfStep(step);
+    if (range == null) return false;
+    final (start, rangeEnd) = range;
+    // Stop just inside the step: at its exact end the next step begins.
+    final end = rangeEnd - 1;
+    final total = _timeline.totalMs;
+    final run = ++_run;
     setState(() {
-      _controller.value = start / _timeline.totalMs;
       _playing = true;
-      _controller.repeat();
+      _controller.value = start / total;
+      _controller
+          .animateTo(end / total, duration: Duration(milliseconds: end - start), curve: Curves.linear)
+          .whenCompleteOrCancel(() {
+        if (mounted && run == _run) setState(() => _playing = false);
+      });
     });
     return true;
   }
 
+  /// Play: run the whole demo in a loop from here. Pause: stop.
   void _togglePlay() {
+    _run++;
     setState(() {
       _playing = !_playing;
       if (_playing) {
@@ -117,14 +137,6 @@ class GuideDemoViewState extends State<GuideDemoView> with SingleTickerProviderS
       } else {
         _controller.stop();
       }
-    });
-  }
-
-  void _replay() {
-    setState(() {
-      _controller.value = 0;
-      _playing = true;
-      _controller.repeat();
     });
   }
 
@@ -211,8 +223,6 @@ class GuideDemoViewState extends State<GuideDemoView> with SingleTickerProviderS
                           _togglePlay,
                         ),
                         const SizedBox(width: 4),
-                        _button(s.guideDemoReplay, Icons.replay, _replay),
-                        const SizedBox(width: 4),
                         _button(s.resetView, Icons.center_focus_weak, _resetCamera),
                       ],
                     ),
@@ -228,7 +238,7 @@ class GuideDemoViewState extends State<GuideDemoView> with SingleTickerProviderS
                 backgroundColor: colors.surfaceContainerHighest,
               ),
             ),
-            if (widget.showCaption) _caption(context),
+            if (widget.expanded) ...[_stepBar(context, s), _caption(context)],
           ],
         ),
       ),
@@ -236,12 +246,90 @@ class GuideDemoViewState extends State<GuideDemoView> with SingleTickerProviderS
   }
 
   Widget _button(String tooltip, IconData icon, VoidCallback onPressed) => IconButton.filledTonal(
-    tooltip: tooltip,
-    visualDensity: VisualDensity.compact,
-    iconSize: 20,
-    onPressed: onPressed,
-    icon: Icon(icon),
-  );
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        iconSize: 20,
+        onPressed: onPressed,
+        icon: Icon(icon),
+      );
+
+  /// Previous / numbered steps / next / replay this step.
+  Widget _stepBar(BuildContext context, S s) {
+    final colors = Theme.of(context).colorScheme;
+    final steps = _timeline.steps;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final current = _timeline.frameAt(_ms).step;
+        final index = steps.indexOf(current);
+        final prev = index > 0 ? steps[index - 1] : null;
+        final next = index < 0 ? steps.first : (index < steps.length - 1 ? steps[index + 1] : null);
+        return Row(
+          children: [
+            IconButton(
+              tooltip: s.guideDemoPrevStep,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.skip_previous),
+              onPressed: prev == null ? null : () => playStep(prev),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final step in steps)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: _stepDot(s, colors, step, active: step == current),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: s.guideDemoNextStep,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.skip_next),
+              onPressed: next == null ? null : () => playStep(next),
+            ),
+            IconButton(
+              tooltip: s.guideDemoReplayStep,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.replay),
+              onPressed: current < 0 ? null : () => playStep(current),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _stepDot(S s, ColorScheme colors, int step, {required bool active}) => Tooltip(
+        message: s.guideDemoShowStep(step + 1),
+        child: InkResponse(
+          onTap: () => playStep(step),
+          radius: 18,
+          child: Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active ? colors.primary : colors.surface,
+              border: Border.all(color: colors.primary),
+            ),
+            child: Text(
+              '${step + 1}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: active ? colors.onPrimary : colors.primary,
+              ),
+            ),
+          ),
+        ),
+      );
 
   /// The current step's number and text under the view, always two lines
   /// tall so the view does not jump when the text changes.

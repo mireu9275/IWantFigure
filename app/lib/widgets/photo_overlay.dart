@@ -578,9 +578,12 @@ class _OverlayPainter extends CustomPainter {
       ..strokeWidth = 1
       ..color = _faintColor;
     for (final o in otherObjects) {
+      // Bars are drawn (and labelled) from the geometry; the ids from the
+      // analysis are internal and never shown.
+      if (o.kind.isBar) continue;
       final r = mapper.boxToWidget(o.bbox);
       canvas.drawRect(r, paint);
-      _label(canvas, o.id, r.topLeft + const Offset(2, 2), _faintColor, small: true);
+      _label(canvas, strings.labelOtherPrize, r.topLeft + const Offset(2, 2), _faintColor, small: true);
     }
   }
 

@@ -166,6 +166,7 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
               ? Center(child: Text(s.noPlanTitle))
               : Column(
                   children: [
+                    if (analysis.provider == 'mock') _MockResultBanner(text: s.mockResultBanner),
                     Expanded(
                       child: TabBarView(
                         controller: _tabs,
@@ -382,4 +383,34 @@ class _ResultScreenState extends State<ResultScreen> with SingleTickerProviderSt
         SessionOutcome.fail => s.outcomeFail,
         SessionOutcome.open => s.outcomeOpen,
       };
+}
+
+/// Shown above the tabs when the result came from the mock provider: the
+/// photo was not analysed, the plan is the bundled sample.
+class _MockResultBanner extends StatelessWidget {
+  const _MockResultBanner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Material(
+      color: scheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.science_outlined, size: 18, color: scheme.onTertiaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(text, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onTertiaryContainer)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

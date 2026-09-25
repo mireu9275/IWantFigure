@@ -171,3 +171,17 @@ void usePhoneViewport(WidgetTester tester) {
 /// A throw-away history directory for a test.
 Directory tempHistoryDir(String tag) =>
     Directory.systemTemp.createTempSync('iwf_history_$tag');
+
+/// Scrolls the page's main (first) scrollable until [finder] is built, then
+/// brings its last match to [alignment] of the viewport. Moves the scroll
+/// position directly because a drag over the guide's 3D demo would turn the
+/// view instead of scrolling the page.
+Future<void> scrollPageTo(WidgetTester tester, Finder finder, {double alignment = 0.7}) async {
+  final position = tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+  for (var i = 0; i < 80 && finder.evaluate().isEmpty; i++) {
+    position.jumpTo((position.pixels + 200).clamp(0.0, position.maxScrollExtent));
+    await tester.pump();
+  }
+  await Scrollable.ensureVisible(tester.element(finder.last), alignment: alignment);
+  await tester.pump();
+}

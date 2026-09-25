@@ -8,7 +8,7 @@
   "properties": {
     "layout_type": {
       "type": "string",
-      "enum": ["bridge_parallel", "bridge_hanoji", "bridge_step", "front_drop", "valley_drop", "side_drop", "ring_pera", "ring_d", "hook_s", "takoyaki", "three_claw", "two_claw_direct", "pile", "floor_box", "unknown"]
+      "enum": ["bridge_parallel", "bridge_hanoji", "bridge_step", "bridge_four", "bridge_mixed", "front_drop", "valley_drop", "side_drop", "ring_pera", "ring_d", "hang_string", "hook_s", "takoyaki", "three_claw", "two_claw_direct", "pile", "floor_box", "unknown"]
     },
     "confidence": { "type": "number", "description": "0..1" },
     "machine": {

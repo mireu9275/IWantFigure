@@ -1,6 +1,7 @@
 /// Guide demos for prizes hooked by a tag, a ring or an S-hook: a thin ring
-/// (ペラ輪) on a box on a ramp, a D-ring hanging on a rod (D環) and a prize
-/// fished with a chain and S-hook (S字フック).
+/// (ペラ輪) on a box on a ramp, a D-ring hanging on a rod (D環), a prize
+/// fished with a chain and S-hook (S字フック) and a box hanging from a rod by
+/// a string loop (紐吊り).
 ///
 /// Every ring is drawn as a loop of short cylinders in the local frame of
 /// its prize actor, so it moves (and turns) together with the prize.
@@ -631,5 +632,191 @@ Scene3D _fishStage() {
     cylinders: _fishRing('other', top),
     dropHole: const SceneDropHole(xMin: -290, xMax: -110, yMin: 50, yMax: 240),
     camera: const CameraHint(yawDeg: 36, pitchDeg: 20, distanceMm: 900, target: Vec3(-60, -10, 250)),
+  );
+}
+
+// -----------------------------------------------------------------------------
+// 紐吊り.
+
+/// String loop (紐): band radius, radius of the loose arc that lies over the
+/// rod, and length of the two strands from the arc down to the knot.
+const double _strR = 2;
+const double _strArcR = 20;
+const double _strLen = 70;
+
+/// Local frame of the string prize: origin = top of the arc (centre line of
+/// the string where it rests on the rod). The loop lies in the local XZ
+/// plane (crosswise to the rod); the knot and the box hang below it.
+const double _strKnotZ = -_strArcR - _strLen;
+const double _strKnotH = 8;
+const Vec3 _strBoxSize = Vec3(120, 60, 110);
+const double _strBoxTop = _strKnotZ - _strKnotH;
+
+/// Stopper bump standing on the free end of the rod.
+const double _stopperY = _rodEndY - 6;
+const double _stopperH = _rodR + 10;
+
+/// Half width of the loop at local height [z]: a loose round arc around the
+/// rod, then two strands that close into a teardrop at the knot.
+double _strHalfW(double z) {
+  if (z >= -_strArcR) return math.sqrt(math.max(0.0, _strArcR * _strArcR - (z + _strArcR) * (z + _strArcR)));
+  final t = ((-_strArcR - z) / _strLen).clamp(0.0, 1.0);
+  return _strArcR * (1 - t * t);
+}
+
+SceneActor _stringPrize(S s, Pose pose) {
+  double z(double t) => -_strArcR - _strLen * t;
+  final points = <Vec3>[
+    // Arc over the rod from the right side to the left side …
+    for (var i = 0; i <= 8; i++)
+      Vec3(_strArcR * math.cos(math.pi * i / 8), 0, -_strArcR + _strArcR * math.sin(math.pi * i / 8)),
+    // … down the left strand to the knot and up the right one.
+    for (var k = 1; k <= 6; k++) Vec3(-_strHalfW(z(k / 6)), 0, z(k / 6)),
+    for (var k = 5; k >= 1; k--) Vec3(_strHalfW(z(k / 6)), 0, z(k / 6)),
+  ];
+  return SceneActor(
+    id: 'prize',
+    pose: pose,
+    cylinders: _loop('string', points, radius: _strR, material: SceneMaterial.rubberTube),
+    boxes: [
+      const SceneBox(
+        id: 'str_knot',
+        pose: Pose(Vec3(0, 0, _strKnotZ - _strKnotH / 2)),
+        size: Vec3(12, 8, _strKnotH),
+        material: SceneMaterial.rubberTube,
+      ),
+      SceneBox(
+        id: 'prize',
+        pose: Pose(Vec3(0, 0, _strBoxTop - _strBoxSize.z / 2)),
+        size: _strBoxSize,
+        label: s.labelPrize,
+      ),
+    ],
+  );
+}
+
+/// Pose of the string prize hanging on the rod at [y], turned [yawDeg].
+Pose _onRodString(double y, {double yawDeg = 0}) =>
+    Pose(Vec3(0, y, _rodZ + _rodR + _strR), Rotation(yawDeg: yawDeg));
+
+/// [loop] with the prize swung [swingDeg] about the point where the string
+/// rests on the rod (> 0 = the prize swings toward the player).
+Pose _strSwung(Pose loop, double swingDeg) =>
+    tiltAbout(loop, loop.position - const Vec3(0, 0, _strR), pitchDeg: swingDeg);
+
+/// 紐吊り: a box hangs by a soft string loop from a rod fixed to the back
+/// wall, whose free end (with a small stopper) is over the drop hole. A
+/// first play pinches the string: it comes up a little and slides, so the
+/// arm is strong enough. Then a tip hooks the wall side of the loop, left
+/// and right in turn, and each closing shoves the loop along the rod (the
+/// box swings behind it). Near the end a tip goes into the loop beside the
+/// rod, lifts it over the stopper and the claw's move pulls it off the end;
+/// it slips off the tip into the hole.
+GuideDemo hangStringDemo(S s) {
+  final start = _onRodString(-140);
+  final prize = _stringPrize(s, start);
+  final script = DemoScript(actors: [prize], home: const Vec3(-190, 150, 340), hoverZ: 340);
+
+  // 0: power check — both tips pinch the strands under the rod. The string
+  // comes up a little, slips through the tips and lands a bit further on.
+  script.pause(700, step: 0);
+  const pinchZ = -32.0;
+  final rest0 = _onRodString(-128, yawDeg: 4);
+  script.play(
+    step: 0,
+    center: start.toWorld(const Vec3(0, 0, pinchZ)),
+    closeTo: 2 * _strHalfW(pinchZ) - 6,
+    carryMm: 48,
+    onLift: {'prize': shifted(start, const Vec3(0, 4, 26))},
+    onRelease: {'prize': rest0},
+  );
+
+  // Claw centre that puts the tip of [arm] just outside that side of the
+  // loop and a little behind it (the wall side), under the rod.
+  Vec3 wallSide(Pose loop, Arm arm) {
+    final side = arm == Arm.right ? 1.0 : -1.0;
+    return script.centerFor(loop.toWorld(Vec3(side * (_strArcR + _strR + 8), -10, -30)), arm);
+  }
+
+  // One shove: the closing tip drags the loop forward to [to]; the box lags
+  // behind, swings past and settles.
+  void shove(int step, Pose from, Arm arm, Pose to) => script.play(
+        step: step,
+        center: wallSide(from, arm),
+        arm: arm,
+        closeTo: 136,
+        onClose: {'prize': _strSwung(to, -9)},
+        onLift: {'prize': _strSwung(to, 5)},
+        onRelease: {'prize': to},
+      );
+
+  // 1: hook the wall side of the loop with the left tip; closing pushes the
+  // loop toward the free end.
+  script.aim(wallSide(rest0, Arm.left), arm: Arm.left, step: 1);
+  script.pause(900, step: 1);
+  final rest1 = _onRodString(-85, yawDeg: -14);
+  shove(1, rest0, Arm.left, rest1);
+
+  // 2: right, then left again — the loop walks to just behind the stopper,
+  // turned a little.
+  final rest2 = _onRodString(-42, yawDeg: 12);
+  shove(2, rest1, Arm.right, rest2);
+  final rest3 = _onRodString(4, yawDeg: -30);
+  shove(2, rest2, Arm.left, rest3);
+
+  // 3: the right tip closes into the loop beside the rod, just under the
+  // arc (引っ掛け). Rising, it lifts the loop over the stopper; the claw's
+  // move toward the front pulls it off the free end, and when the arms open
+  // it slips off the tip and falls into the hole.
+  const grip = 136.0;
+  final c3 = rest3.toWorld(const Vec3(14, 0, -9)) - const Vec3(grip / 2, 0, 0);
+  script.aim(c3, arm: Arm.right, step: 3);
+  script.pause(500, step: 3);
+  final dropAt = c3 + const Vec3(0, 70, 0);
+  final lifted = c3.z + 38;
+  final hanging = Vec3(dropAt.x, dropAt.y, lifted) + (rest3.position - c3);
+  script.carry(
+    step: 3,
+    actorId: 'prize',
+    center: c3,
+    dropAt: dropAt,
+    fallTo: Pose(Vec3(hanging.x, hanging.y + 10, -20), const Rotation(pitchDeg: 15, yawDeg: -30)),
+    arm: Arm.right,
+    gripMm: grip,
+    liftZ: lifted,
+  );
+  script.goHome(step: 3);
+  script.pause(900, step: 3);
+
+  return GuideDemo(
+    type: LayoutType.hangString,
+    timeline: SceneTimeline(
+      stage: _stringStage(),
+      actors: [prize],
+      claw: script.start,
+      keys: script.keys,
+      clawRestHeightMm: 490,
+    ),
+  );
+}
+
+/// The rod of [_rodStage] with a small stopper standing on its free end.
+Scene3D _stringStage() {
+  const backY = -demoFieldDepthMm / 2 + 8;
+  return const Scene3D(
+    fieldWidthMm: demoFieldWidthMm,
+    fieldDepthMm: demoFieldDepthMm,
+    cylinders: [
+      SceneCylinder(id: 'post', p0: Vec3(0, backY, 0), p1: Vec3(0, backY, _rodZ + 30), radius: 10),
+      SceneCylinder(id: 'rod', p0: Vec3(0, backY, _rodZ), p1: Vec3(0, _rodEndY, _rodZ), radius: _rodR),
+      SceneCylinder(
+        id: 'stopper',
+        p0: Vec3(0, _stopperY, _rodZ),
+        p1: Vec3(0, _stopperY, _rodZ + _stopperH),
+        radius: 5,
+      ),
+    ],
+    dropHole: SceneDropHole(xMin: -130, xMax: 130, yMin: -40, yMax: 240),
+    camera: CameraHint(yawDeg: 50, pitchDeg: 16, distanceMm: 820, target: Vec3(0, -40, 225)),
   );
 }

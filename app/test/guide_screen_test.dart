@@ -33,7 +33,8 @@ void main() {
       // Every type has exactly one tile (the list is lazy, so scroll to each).
       for (final type in LayoutType.values) {
         final tile = find.text(s.layoutLabel(type));
-        await tester.dragUntilVisible(tile, find.byType(ListView), const Offset(0, -200));
+        // Keep the finger down so a fling cannot carry the list past the tile.
+        await tester.dragUntilVisible(tile, find.byType(ListView), const Offset(0, -200), continuous: true);
         expect(tile, findsOneWidget, reason: '$type tile');
         expect(find.text(guideFor(type, s).summary), findsOneWidget, reason: '$type summary');
         expect(find.byIcon(layoutIcon(type)), findsWidgets, reason: '$type icon');
@@ -48,7 +49,7 @@ void main() {
       expect(tester.widget<GuideDetailScreen>(find.byType(GuideDetailScreen)).type, last);
       expect(find.text(s.layoutLabel(last)), findsOneWidget); // app bar
       for (final section in [s.guideRecognize, s.guideHowTo, s.guideTips, s.guideAbort, s.guideCost]) {
-        await tester.dragUntilVisible(find.text(section), find.byType(CustomScrollView), const Offset(0, -250));
+        await scrollPageTo(tester, find.text(section));
         expect(find.text(section), findsOneWidget, reason: section);
       }
       // Unknown recommends no technique, so that section is absent.
@@ -81,19 +82,19 @@ void main() {
 
     expect(find.text(g.summary), findsOneWidget);
     for (var i = 0; i < g.howTo.length; i++) {
-      await tester.dragUntilVisible(find.text(g.howTo[i]).last, find.byType(CustomScrollView), const Offset(0, -200));
+      await scrollPageTo(tester, find.text(g.howTo[i]));
       expect(find.text(g.howTo[i]), findsWidgets); // also in the demo caption while it plays
       expect(find.text('${i + 1}'), findsWidgets);
     }
-    await tester.dragUntilVisible(find.text(s.guideTechniques), find.byType(CustomScrollView), const Offset(0, -200));
+    await scrollPageTo(tester, find.text(s.guideTechniques));
     for (final t in g.techniques) {
       expect(find.text(s.techniqueLabel(t)), findsOneWidget, reason: '$t chip');
     }
     for (final a in g.abortWhen) {
-      await tester.dragUntilVisible(find.text(a), find.byType(CustomScrollView), const Offset(0, -200));
+      await scrollPageTo(tester, find.text(a));
       expect(find.text(a), findsOneWidget);
     }
-    await tester.dragUntilVisible(find.text(s.disclaimerShort), find.byType(CustomScrollView), const Offset(0, -200));
+    await scrollPageTo(tester, find.text(s.disclaimerShort));
     expect(find.text(s.disclaimerShort), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -162,7 +163,7 @@ void main() {
 
   Finder inDemo(Finder f) => find.descendant(of: find.byType(GuideDemoView), matching: f);
 
-  testWidgets('the bridge demo plays, captions the step on screen and jumps to a tapped step', (tester) async {
+  testWidgets('the bridge demo plays, captions the step on screen and replays a tapped step', (tester) async {
     await pumpDetail(tester, LayoutType.bridgeParallel);
     final s = stringsFor('ko');
     final g = guideFor(LayoutType.bridgeParallel, s);
@@ -193,29 +194,70 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(state.positionMs, greaterThan(held));
 
-    // Tapping a How-to step with a scene jumps there.
+    // Tapping a How-to step plays just that step and stops at its end.
     const target = 4;
-    final item = find.text(g.howTo[target]).last;
+    final (start, end) = tl.rangeOfStep(target)!;
+    final item = find.text(g.howTo[target]).last; // the list item, after the demo caption
     // Scrolled text passes under the pinned demo: put the item well below it.
-    await tester.dragUntilVisible(item, find.byType(CustomScrollView), const Offset(0, -150));
-    await Scrollable.ensureVisible(tester.element(item), alignment: 0.7);
-    await tester.pump();
+    await scrollPageTo(tester, find.text(g.howTo[target]));
     expect(tester.getRect(item).top, greaterThan(tester.getRect(find.byType(GuideDemoView)).bottom));
     await tester.tap(item);
     await tester.pump();
-    expect(state.positionMs, closeTo(tl.startOfStep(target)!.toDouble(), 40));
-    expect(tl.frameAt(state.positionMs + 20).step, target);
+    expect(state.positionMs, closeTo(start.toDouble(), 40));
+    expect(state.playing, isTrue);
+    await tester.pump(); // the ticker starts on this frame
+    await tester.pump(Duration(milliseconds: end - start + 300));
+    expect(state.playing, isFalse, reason: 'a single step stops at its end');
+    expect(state.positionMs, closeTo(end.toDouble(), 20));
+    expect(tl.frameAt(state.positionMs).step, target);
 
     // The demo stays pinned on screen while the text scrolls under it.
-    await tester.dragUntilVisible(find.text(s.disclaimerShort), find.byType(CustomScrollView), const Offset(0, -250));
+    await scrollPageTo(tester, find.text(s.disclaimerShort));
     final rect = tester.getRect(find.byType(GuideDemoView));
     expect(rect.top, greaterThanOrEqualTo(0));
     expect(rect.height, greaterThan(100));
+    expect(tester.takeException(), isNull);
+  });
 
-    // Replay goes back to the start.
-    await tester.tap(find.byTooltip(s.guideDemoReplay));
+  testWidgets('the step bar plays the previous, next or same step once', (tester) async {
+    await pumpDetail(tester, LayoutType.bridgeParallel);
+    final s = stringsFor('ko');
+    final g = guideFor(LayoutType.bridgeParallel, s);
+    final tl = guideDemoFor(LayoutType.bridgeParallel, s)!.timeline;
+    final state = tester.state<GuideDemoViewState>(find.byType(GuideDemoView));
+    final steps = tl.steps;
+    expect(steps.length, greaterThanOrEqualTo(3));
+
+    Future<void> playsOnly(int step) async {
+      final (start, end) = tl.rangeOfStep(step)!;
+      await tester.pump();
+      expect(state.positionMs, closeTo(start.toDouble(), 40), reason: 'starts at step $step');
+      await tester.pump(); // the ticker starts on this frame
+      await tester.pump(Duration(milliseconds: end - start + 300));
+      expect(state.playing, isFalse, reason: 'stops after step $step');
+      expect(tl.frameAt(state.positionMs).step, step);
+      expect(inDemo(find.text(g.howTo[step])), findsOneWidget, reason: 'caption of step $step');
+    }
+
+    // A numbered dot plays that step.
+    await tester.tap(inDemo(find.text('${steps[1] + 1}')).first);
+    await playsOnly(steps[1]);
+    // Next and previous move one step.
+    await tester.tap(find.byTooltip(s.guideDemoNextStep));
+    await playsOnly(steps[2]);
+    await tester.tap(find.byTooltip(s.guideDemoPrevStep));
+    await playsOnly(steps[1]);
+    // Replay this step runs it again from its start.
+    await tester.tap(find.byTooltip(s.guideDemoReplayStep));
+    await playsOnly(steps[1]);
+    // The first step has no previous one; play resumes the whole loop.
+    await tester.tap(inDemo(find.text('${steps.first + 1}')).first);
+    await playsOnly(steps.first);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.skip_previous)).onPressed, isNull);
+    await tester.tap(find.byTooltip(s.guideDemoPlay));
     await tester.pump();
-    expect(state.positionMs, lessThan(40));
+    await tester.pump(const Duration(seconds: 3));
+    expect(state.playing, isTrue);
     expect(tester.takeException(), isNull);
   });
 
@@ -228,6 +270,18 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(state.positionMs, 0);
     expect(find.byTooltip(stringsFor('en').guideDemoPlay), findsOneWidget);
+  });
+
+  testWidgets('only Korean guide pages show the Japanese name, once', (tester) async {
+    await pumpDetail(tester, LayoutType.bridgeFour);
+    final ko = stringsFor('ko');
+    expect(find.text(ko.guideJapaneseName(LayoutType.bridgeFour.labelJa)), findsOneWidget);
+
+    await pumpDetail(tester, LayoutType.bridgeFour, code: 'ja');
+    expect(find.textContaining(stringsFor('ja').guideJapaneseName('')), findsNothing);
+
+    await pumpDetail(tester, LayoutType.unknown);
+    expect(find.textContaining(ko.guideJapaneseName('')), findsNothing);
   });
 
   testWidgets('a layout without a demo shows no demo section', (tester) async {

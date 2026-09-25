@@ -188,6 +188,19 @@ class SceneTimeline {
     return null;
   }
 
+  /// The first continuous stretch of time `(start, end)` that shows [step],
+  /// or null when the timeline never shows it.
+  (int, int)? rangeOfStep(int step) {
+    int? start;
+    for (var i = 1; i < _frames.length; i++) {
+      if (_ends[i] <= _ends[i - 1]) continue; // jumps take no time
+      final shows = _frames[i].step == step;
+      if (shows && start == null) start = _ends[i - 1];
+      if (!shows && start != null) return (start, _ends[i - 1]);
+    }
+    return start == null ? null : (start, totalMs);
+  }
+
   /// State at [ms] (clamped to the timeline).
   SceneFrame frameAt(double ms) {
     final t = ms.clamp(0, totalMs.toDouble()).toDouble();

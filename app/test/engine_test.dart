@@ -60,7 +60,7 @@ void main() {
       prize: light.copyWith(widthMm: 190),
     );
     expect(narrow.technique, Technique.tateHame);
-    expect(narrow.warnings.any((w) => w.contains('横ハメ')), isTrue);
+    expect(narrow.warnings.any((w) => w.contains('눕혀서 떨어뜨릴 수 없')), isTrue);
   });
 
   test('observations drive the current step and the arm-power estimate', () {
@@ -86,7 +86,7 @@ void main() {
     expect(done.finished, isTrue);
 
     final stuck = engine.plan(r, observations: const [Observation(ObservationKind.stuck)]);
-    expect(stuck.warnings.any((w) => w.contains('初期位置')), isTrue);
+    expect(stuck.warnings.any((w) => w.contains('처음 위치')), isTrue);
   });
 
   test('user corrections override detected geometry', () {
@@ -111,7 +111,7 @@ void main() {
     expect(plan.canPlan, isTrue);
     expect(plan.overlay!.barsSynthesized, isTrue);
     expect(plan.overlay!.frontBar, isNotNull);
-    expect(plan.warnings.any((w) => w.contains('바')), isTrue);
+    expect(plan.warnings.any((w) => w.contains('봉')), isTrue);
   });
 
   test('front_drop: alternate 寄せ, then 押し込み after enough movement', () {
@@ -182,6 +182,23 @@ void main() {
     }
   });
 
+  test('four-bar, mixed and string layouts get their own rules', () {
+    final four = engine.plan(_sample().copyWith(layoutType: LayoutType.bridgeFour), locale: 'ko');
+    expect(four.technique, anyOf(Technique.tateHame, Technique.yokoHame));
+    expect(four.rationale.join(' '), contains('평행한 봉 4개'));
+    expect(four.abortIf.join(' '), contains('끼인 상태'), reason: 'four bars are a bridge');
+
+    final mixed = engine.plan(_sample().copyWith(layoutType: LayoutType.bridgeMixed, strategy: const Strategy()), locale: 'ja');
+    expect(mixed.technique, Technique.zurashi, reason: 'default: shift toward the wide end');
+    expect(mixed.rationale.join(' '), contains('4本 平行＋ハの字'));
+
+    final hang = engine.plan(_sample().copyWith(layoutType: LayoutType.hangString, strategy: const Strategy()), locale: 'en');
+    expect(hang.technique, Technique.yose);
+    expect(hang.rationale.join(' '), contains('String hang'));
+    expect(hang.abortIf.join(' '), contains('string only sways'));
+    expect(hang.abortIf.join(' '), isNot(contains('끼인 상태')), reason: 'not a bridge');
+  });
+
   test('3D field frame: back edge of the prize is −Y, ring targets map the same way', () {
     final r = _sample();
     final tate = engine.plan(r).steps.firstWhere((s) => s.technique == Technique.tateHame);
@@ -236,7 +253,7 @@ void main() {
     );
     final plan = engine.plan(noBars, prize: PrizeSpec.defaultFigureBox); // 300 g → light
     expect(plan.technique, Technique.yokoHame);
-    expect(plan.warnings.any((w) => w.contains('横ハメ가 불가능')), isFalse);
+    expect(plan.warnings.any((w) => w.contains('눕혀서 떨어뜨릴 수 없')), isFalse);
     expect(plan.warnings.any((w) => w.contains('간격')), isTrue);
     expect(plan.rationale.any((w) => w.contains('무거운')), isFalse);
   });

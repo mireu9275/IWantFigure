@@ -565,3 +565,278 @@ GuideDemo bridgeStepDemo(S s) {
     ),
   );
 }
+
+// -----------------------------------------------------------------------------
+// 4本橋渡し / 4本 平行＋ハの字
+
+/// Thin posts under both ends of each bar, so bars at different heights
+/// read at a glance.
+List<SceneCylinder> _postsUnder(List<SceneCylinder> bars) => [
+      for (final bar in bars)
+        for (final (i, end) in [bar.p0, bar.p1].indexed)
+          SceneCylinder(
+            id: 'post_${bar.id}_$i',
+            p0: Vec3(end.x, end.y, 0),
+            p1: Vec3(end.x, end.y, end.z - bar.radius),
+            radius: 4,
+            material: bar.material,
+          ),
+    ];
+
+/// A bar along X at [y] and [z] over the whole field width.
+SceneCylinder _barAlongX(String id, double y, double z, {String label = ''}) => SceneCylinder(
+      id: id,
+      p0: Vec3(-demoFieldWidthMm / 2, y, z),
+      p1: Vec3(demoFieldWidthMm / 2, y, z),
+      radius: _barR,
+      label: label,
+    );
+
+/// 4本橋渡し: the middle bars at y = ±[_fourMidY] carry the box, the outer
+/// ones ([_fourOuterY], a little lower) only catch it when it tilts.
+const double _fourMidY = 65;
+const double _fourOuterY = 130;
+const double _fourOuterZ = _barZ - 15;
+
+/// Camera for the four bars: a little higher than the other bridges so the
+/// outer bars read as separate from the middle pair.
+const CameraHint _fourCamera = CameraHint(yawDeg: 30, pitchDeg: 32, distanceMm: 1400, target: Vec3(0, 0, 185));
+
+/// 4本橋渡し, 縦ハメ into the middle gap. The box starts a little toward the
+/// front, its front end over the front outer bar: the first lift of the
+/// back end tips it onto that bar, which holds it, and it comes back. With
+/// the other arm it slides back until its centre is over the middle gap; the
+/// front end slips in, the raised back end is lifted further and the
+/// remaining corner is pressed through. 横ハメ (a wide middle gap) is not
+/// shown.
+GuideDemo bridgeFourDemo(S s) {
+  const size = Vec3(150, 220, 90);
+  final outer = [
+    _barAlongX('bar_outer_front', _fourOuterY, _fourOuterZ),
+    _barAlongX('bar_outer_back', -_fourOuterY, _fourOuterZ),
+  ];
+  final bars = [
+    _barAlongX('bar_front', _fourMidY, _barZ, label: s.labelFrontBar),
+    _barAlongX('bar_back', -_fourMidY, _barZ, label: s.labelBackBar),
+    ...outer,
+  ];
+  final stage = Scene3D(
+    fieldWidthMm: demoFieldWidthMm,
+    fieldDepthMm: demoFieldDepthMm,
+    cylinders: [...bars, ..._postsUnder(bars)],
+    dropHole: const SceneDropHole(xMin: -200, xMax: 200, yMin: -_fourMidY + _barR, yMax: _fourMidY - _barR),
+    camera: _fourCamera,
+  );
+
+  const onBars = _barZ + _barR + 45; // centre height when lying on the bars
+  const start = Pose(Vec3(0, 22, onBars));
+  final prize = boxActor(id: 'prize', pose: start, size: size, label: s.labelPrize);
+  final script = DemoScript(actors: [prize], home: const Vec3(-230, 200, 420), hoverZ: 400);
+  const frontPivot = Vec3(0, _fourMidY, _barZ + _barR);
+  Pose tilt(Pose p, double deg) => tiltAbout(p, frontPivot, pitchDeg: -deg);
+  // Largest front-down tilt about the front middle bar before the front end
+  // lands on the front outer bar.
+  double catchDeg(Pose p) {
+    var deg = 0.0;
+    while (deg < 30 && _sinkInto(tilt(p, deg + 0.25), size, outer) <= 0.3) {
+      deg += 0.25;
+    }
+    return deg;
+  }
+
+  Pose wedge(double deg) => bridgeWedge(thetaDeg: deg, size: size, frontY: _fourMidY, backY: -_fourMidY)!;
+
+  // One tip hooked just inside the back end lifts it; the box turns about
+  // the front middle bar (at most until the front outer bar stops it) and
+  // lands at [to].
+  void lift(int step, Arm arm, Pose to, {double deg = 30}) {
+    final from = script.pose('prize');
+    final v = arm == Arm.right ? 0.78 : 0.22;
+    final hook = pointOn(from, size, 0.93, v, 1);
+    final lifted = tilt(from, math.min(deg, catchDeg(from)));
+    script.play(
+      step: step,
+      center: script.centerFor(hook, arm),
+      arm: arm,
+      carryMm: pointOn(lifted, size, 0.93, v, 1).z - hook.z,
+      onClose: {'prize': tilt(from, 3)},
+      onLift: {'prize': lifted},
+      onRelease: {'prize': to},
+    );
+  }
+
+  // 0: which bars carry the box, which gap is the drop.
+  script.pause(1200, step: 0);
+
+  // 1: 縦ハメ — the right tip lifts the back end, but the front end comes
+  // down on the front outer bar, which holds it; it drops back a little
+  // further back. Then the left tip on the other back corner.
+  lift(1, Arm.right, const Pose(Vec3(0, 6, onBars), Rotation(yawDeg: -4)));
+  lift(1, Arm.left, const Pose(Vec3(0, -14, onBars)), deg: 13);
+
+  // 2: its centre is now over the middle gap: the next lift lets the front
+  // end slip off the front middle bar into the gap.
+  // It slides back until the front end is at the edge of the front middle
+  // bar, then drops in.
+  final slipping = _restOn(const Pose(Vec3(0, -40, onBars), Rotation(pitchDeg: -12)), size, bars);
+  final leaning = wedge(24);
+  lift(2, Arm.right, slipping, deg: 13);
+  script.move({'prize': leaning}, ms: 300, step: 2, curve: Curves.easeIn);
+
+  // 3: it leans in the gap — lift the raised back end to stand it up.
+  final hookTop = pointOn(leaning, size, 0.95, 0.28, 1);
+  final raised = wedge(42);
+  script.play(
+    step: 3,
+    center: script.centerFor(hookTop, Arm.left),
+    arm: Arm.left,
+    carryMm: pointOn(wedge(34), size, 0.95, 0.28, 1).z - hookTop.z,
+    onLift: {'prize': wedge(34)},
+    onRelease: {'prize': raised},
+  );
+
+  // 4: press the remaining corner down: it stands up and drops through.
+  final top = pointOn(raised, size, 1, 0.5, 1);
+  final press = Vec3(top.x, top.y + 20, top.z - 20);
+  final through = Pose(Vec3(0, 0, raised.position.z - 70), const Rotation(pitchDeg: -84));
+  script.play(step: 4, center: press, closeTo: script.openMm, onDescend: {'prize': through});
+  script.move(
+    {'prize': const Pose(Vec3(0, 0, -120), Rotation(pitchDeg: -88))},
+    ms: 450,
+    step: 4,
+    curve: Curves.easeIn,
+  );
+  script.hide({'prize'});
+  script.goHome(step: 4);
+  script.pause(800, step: 4);
+
+  return GuideDemo(
+    type: LayoutType.bridgeFour,
+    timeline: SceneTimeline(
+      stage: stage,
+      actors: [prize],
+      claw: script.start,
+      keys: script.keys,
+      clawRestHeightMm: 620,
+    ),
+  );
+}
+
+/// 4本 平行＋ハの字: half the gap between the inner bars at [x]; they flare
+/// from the narrow left end (x = −300: 35) toward the wide right end
+/// (x = 300: 110). The outer bars are parallel at ±[_mixedOuterY].
+double _mixedHalf(double x) => 72.5 + 0.125 * x;
+const double _mixedOuterY = 140;
+
+/// Camera for the mixed bars: from the front and high, so the inner bars
+/// read as spreading toward the right inside the parallel outer pair.
+const CameraHint _mixedCamera = CameraHint(yawDeg: 14, pitchDeg: 44, distanceMm: 1350, target: Vec3(20, 0, 170));
+
+/// 4本 平行＋ハの字: all four bars run left to right; the outer two are
+/// parallel, the inner two spread toward the right, where the drop is. The
+/// box starts left of the middle; the left tip on its narrow-side end drags
+/// it right as the arms close (ずらし), front and back corners in turn so it
+/// stays straight (寄せ). Where the inner gap nears its length the front end
+/// dips in; the raised back end is lifted and then pressed through.
+/// 持ち上げ (strong arm) is not shown.
+GuideDemo bridgeMixedDemo(S s) {
+  const size = Vec3(150, 200, 90);
+  const hx = demoFieldWidthMm / 2;
+  const bars = [
+    SceneCylinder(id: 'bar_outer_front', p0: Vec3(-hx, _mixedOuterY, _barZ), p1: Vec3(hx, _mixedOuterY, _barZ)),
+    SceneCylinder(id: 'bar_outer_back', p0: Vec3(-hx, -_mixedOuterY, _barZ), p1: Vec3(hx, -_mixedOuterY, _barZ)),
+    SceneCylinder(id: 'bar_inner_front', p0: Vec3(-hx, 35, _barZ), p1: Vec3(hx, 110, _barZ)),
+    SceneCylinder(id: 'bar_inner_back', p0: Vec3(-hx, -35, _barZ), p1: Vec3(hx, -110, _barZ)),
+  ];
+  final stage = Scene3D(
+    fieldWidthMm: demoFieldWidthMm,
+    fieldDepthMm: demoFieldDepthMm,
+    cylinders: [...bars, ..._postsUnder(bars)],
+    dropHole: const SceneDropHole(xMin: 40, xMax: 290, yMin: -70, yMax: 70),
+    camera: _mixedCamera,
+  );
+
+  const onBars = _barZ + _barR + 45;
+  const start = Pose(Vec3(-110, 0, onBars));
+  final prize = boxActor(id: 'prize', pose: start, size: size, label: s.labelPrize);
+  final script = DemoScript(actors: [prize], home: const Vec3(-240, 200, 420), hoverZ: 400);
+
+  // Leaning front-down between the inner bars with its left edge at the
+  // narrowest part under it.
+  Pose wedge(double deg, double x) {
+    final h = _mixedHalf(x - size.x / 2);
+    return bridgeWedge(thetaDeg: deg, size: size, frontY: h, backY: -h, x: x)!;
+  }
+
+  // ずらし: the left tip on the top of the left end, at [u] (front or back
+  // corner); closing drags the box right, lifting raises its left side a
+  // little (turning about the bottom-right edge) and it lands at [to].
+  void push(int step, double u, Pose to) {
+    final from = script.pose('prize');
+    final hook = pointOn(from, size, u, 0.07, 1);
+    final dragged = shifted(from, const Vec3(24, 0, 0));
+    final lifted = tiltAbout(dragged, pointOn(dragged, size, 0.5, 1, 0), rollDeg: 9);
+    script.play(
+      step: step,
+      center: script.centerFor(hook, Arm.left),
+      arm: Arm.left,
+      closeTo: 130,
+      carryMm: pointOn(lifted, size, u, 0.07, 1).z - hook.z,
+      onClose: {'prize': dragged},
+      onLift: {'prize': lifted},
+      onRelease: {'prize': to},
+    );
+  }
+
+  // 0: see which way the inner bars spread — to the right.
+  script.pause(1300, step: 0);
+
+  // 1: ずらし on the front corner of the narrow-side (left) end.
+  push(1, 0.25, const Pose(Vec3(-45, 0, onBars), Rotation(yawDeg: -4)));
+
+  // 2: 寄せ — then the back corner, then the front again, so it goes
+  // straight; the wider it gets, the further each play moves it.
+  push(2, 0.75, const Pose(Vec3(35, 0, onBars), Rotation(yawDeg: 2)));
+  push(2, 0.25, const Pose(Vec3(110, 0, onBars)));
+
+  // 3: here the inner gap is close to the box length: the front end dips
+  // into it. Lift the raised back end to tilt it more.
+  final dipping = wedge(12, 125);
+  script.move({'prize': dipping}, ms: 500, step: 3);
+  final hookBack = pointOn(dipping, size, 0.95, 0.75, 1);
+  final raised = wedge(30, 125);
+  script.play(
+    step: 3,
+    center: script.centerFor(hookBack, Arm.right),
+    arm: Arm.right,
+    carryMm: pointOn(wedge(22, 125), size, 0.95, 0.75, 1).z - hookBack.z,
+    onLift: {'prize': wedge(22, 125)},
+    onRelease: {'prize': raised},
+  );
+
+  // 4: it hangs at an angle — press the upper end down: it drops through.
+  final top = pointOn(raised, size, 1, 0.5, 1);
+  final press = Vec3(top.x, top.y + 20, top.z - 20);
+  final through = Pose(Vec3(125, raised.position.y + 20, raised.position.z - 70), const Rotation(pitchDeg: -82));
+  script.play(step: 4, center: press, closeTo: script.openMm, onDescend: {'prize': through});
+  script.move(
+    {'prize': Pose(Vec3(125, through.position.y, -120), const Rotation(pitchDeg: -88))},
+    ms: 450,
+    step: 4,
+    curve: Curves.easeIn,
+  );
+  script.hide({'prize'});
+  script.goHome(step: 4);
+  script.pause(800, step: 4);
+
+  return GuideDemo(
+    type: LayoutType.bridgeMixed,
+    timeline: SceneTimeline(
+      stage: stage,
+      actors: [prize],
+      claw: script.start,
+      keys: script.keys,
+      clawRestHeightMm: 620,
+    ),
+  );
+}

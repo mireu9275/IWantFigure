@@ -32,7 +32,7 @@ public class SchemaConverterTests
 
         JsonNode layout = converted["properties"]!["layout_type"]!;
         Assert.Equal("STRING", layout["type"]!.GetValue<string>());
-        Assert.Equal(15, layout["enum"]!.AsArray().Count);
+        Assert.Equal(18, layout["enum"]!.AsArray().Count);
         Assert.Contains("bridge_parallel", layout["enum"]!.AsArray().Select(n => n!.GetValue<string>()));
 
         JsonNode objects = converted["properties"]!["objects"]!;

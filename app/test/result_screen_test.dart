@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:iwantfigure/engine/aim_engine.dart';
@@ -315,6 +317,28 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
+  testWidgets('a mock result says the photo was not analysed; a real one does not', (tester) async {
+    usePhoneViewport(tester);
+    final settings = await loadedSettings();
+    final dir = tempHistoryDir('mock_banner');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final history = HistoryStore(directory: dir);
+    await tester.runAsync(history.load);
+    final s = stringsFor('ko');
+    final photo = (await tester.runAsync(fakePhoto))!;
+
+    for (final provider in ['mock', 'gemini']) {
+      final json = jsonDecode(sampleJsonText()) as Map<String, dynamic>;
+      json['provider'] = provider;
+      final c = SessionController(photo: photo, service: FakeAnalysisService(AnalysisResult.fromJson(json)), locale: 'ko');
+      await tester.runAsync(c.analyze);
+      await tester.pumpWidget(testApp(settings: settings, history: history, home: ResultScreen(controller: c)));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(s.mockResultBanner), provider == 'mock' ? findsOneWidget : findsNothing, reason: provider);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
   testWidgets('tapping the layout title opens the guide for that layout', (tester) async {
     usePhoneViewport(tester);
     final settings = await loadedSettings();
@@ -339,7 +363,10 @@ void main() {
     expect(find.byType(GuideDetailScreen), findsOneWidget);
     expect(tester.widget<GuideDetailScreen>(find.byType(GuideDetailScreen)).type, type);
     expect(find.text(guideFor(type, s).summary), findsOneWidget);
+    // The motion demo sits above the text, so scroll down to the sections.
+    await scrollPageTo(tester, find.text(s.guideRecognize));
     expect(find.text(s.guideRecognize), findsOneWidget);
+    await scrollPageTo(tester, find.text(s.guideHowTo));
     expect(find.text(s.guideHowTo), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -471,7 +498,7 @@ void main() {
     expect(find.byType(GuideDetailScreen), findsOneWidget);
     expect(tester.widget<GuideDetailScreen>(find.byType(GuideDetailScreen)).type, type);
     // The motion demo sits above the text, so scroll down to the steps.
-    await tester.dragUntilVisible(find.text(s.guideHowTo), find.byType(CustomScrollView), const Offset(0, -250));
+    await scrollPageTo(tester, find.text(s.guideHowTo));
     expect(find.text(s.guideHowTo), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

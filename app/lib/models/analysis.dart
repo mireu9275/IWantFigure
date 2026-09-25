@@ -9,11 +9,14 @@ enum LayoutType {
   bridgeParallel('bridge_parallel', '橋渡し(平行)'),
   bridgeHanoji('bridge_hanoji', '末広がり / ハの字'),
   bridgeStep('bridge_step', '段差 / クロス / ピンクチューブ'),
+  bridgeFour('bridge_four', '4本橋渡し'),
+  bridgeMixed('bridge_mixed', '4本 平行＋ハの字'),
   frontDrop('front_drop', '前落とし'),
   valleyDrop('valley_drop', '谷落とし'),
   sideDrop('side_drop', '横落とし'),
   ringPera('ring_pera', 'ペラ輪'),
   ringD('ring_d', 'D環 / Oリング'),
+  hangString('hang_string', '紐吊り'),
   hookS('hook_s', 'S字フック'),
   takoyaki('takoyaki', 'たこ焼き'),
   threeClaw('three_claw', '3本爪 ぬいぐるみ'),
@@ -35,9 +38,13 @@ enum LayoutType {
         orElse: () => LayoutType.unknown,
       );
 
-  /// True for setups where a box rests across two bars.
+  /// True for setups where a box rests across bars.
   bool get isBridge =>
-      this == bridgeParallel || this == bridgeHanoji || this == bridgeStep;
+      this == bridgeParallel ||
+      this == bridgeHanoji ||
+      this == bridgeStep ||
+      this == bridgeFour ||
+      this == bridgeMixed;
 }
 
 /// Kind of a detected object.
